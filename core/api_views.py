@@ -220,6 +220,8 @@ def _user_perms(u):
 @api_view(['GET'])
 def api_me(request):
     u = request.user
+    if not u or not u.is_authenticated:
+        return Response({'detail': 'Chưa đăng nhập'}, status=status.HTTP_401_UNAUTHORIZED)
     membership = get_user_membership(u)
     client_role = 'superadmin' if u.is_staff else (membership.role if membership else None)
     return Response({
@@ -231,6 +233,7 @@ def api_me(request):
         'client_role': client_role,
         'perms': _user_perms(u),
     })
+
 
 
 # ─────────────────────────────────────────────
