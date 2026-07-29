@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi" id="htmlRoot">
+<head>
+  <script>(function(){var t=localStorage.getItem('bb-theme')||'dark';document.getElementById('htmlRoot').className=t==='light'?'light':'';})();</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>AutoTimelapse — {% block title %}{% endblock %}</title>
+  <meta name="theme-color" content="#1a1a1a">
+
+  <!-- Favicon -->
+  <link rel="apple-touch-icon" sizes="120x120" href="/static/assets/img/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/img/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/img/favicon/favicon-16x16.png">
+
+  <!-- SweetAlert2 -->
+  <link rel="stylesheet" href="/static/assets/vendor/sweetalert2/dist/sweetalert2.min.css">
+  <!-- Notyf -->
+  <link rel="stylesheet" href="/static/assets/vendor/notyf/notyf.min.css">
+  <!-- Bootstrap base -->
+  <link rel="stylesheet" href="/static/assets/css/volt.css">
+  <!-- Bambuddy dark theme -->
+  <link rel="stylesheet" href="/static/assets/css/bambuddy-theme.css">
+
+  {% block stylesheets %}{% endblock stylesheets %}
+</head>
+<body>
+
+  {% block content %}{% endblock content %}
+
+  {% include 'includes/scripts.html' %}
+
+  {% block javascripts %}{% endblock javascripts %}
+
+  {% if messages %}
+  <script>
+  (function () {
+    var notyf = new Notyf({ duration: 4000, position: { x: 'right', y: 'top' }, dismissible: true });
+    {% for m in messages %}
+      {% if 'error' in m.tags %}notyf.error("{{ m|escapejs }}");
+      {% elif 'warning' in m.tags %}notyf.open({ type: 'warning', background: '#f59e0b', message: "{{ m|escapejs }}" });
+      {% else %}notyf.success("{{ m|escapejs }}");
+      {% endif %}
+    {% endfor %}
+  }());
+  </script>
+  {% endif %}
+
+</body>
+</html>

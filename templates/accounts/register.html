@@ -1,0 +1,79 @@
+{% extends "layouts/base-fullscreen.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Create Account" %}{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card">
+
+    <div class="auth-logo">
+      <div class="auth-logo-icon">
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <span style="font-size:1.1rem;font-weight:800;color:var(--text-primary)">AutoTimelapse</span>
+    </div>
+
+    <h2 class="auth-title text-center">{% trans "Create Account" %}</h2>
+
+    {% if success %}
+      <div class="alert alert-success py-2 mb-3" role="alert">
+        {{ msg }}<br>
+        <a href="{% url 'login' %}" style="color:var(--accent-light);font-weight:600">{% trans "Sign in now" %} &rarr;</a>
+      </div>
+    {% elif msg %}
+      <div class="alert alert-danger py-2 mb-3" role="alert">{{ msg }}</div>
+    {% else %}
+      <p class="auth-subtitle text-center">{% trans "Create a new account" %}</p>
+    {% endif %}
+
+    {% if not success %}
+    <form method="post" action="" novalidate>
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.username.id_for_label }}">{% trans "Username" %}</label>
+        {{ form.username }}
+        {% if form.username.errors %}<div class="text-danger small mt-1">{{ form.username.errors.as_text }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.email.id_for_label }}">{% trans "Email" %}</label>
+        {{ form.email }}
+        {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors.as_text }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.password1.id_for_label }}">{% trans "Password" %}</label>
+        {{ form.password1 }}
+        {% if form.password1.errors %}<div class="text-danger small mt-1">{{ form.password1.errors.as_text }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.password2.id_for_label }}">{% trans "Confirm password" %}</label>
+        {{ form.password2 }}
+        {% if form.password2.errors %}<div class="text-danger small mt-1">{{ form.password2.errors.as_text }}</div>{% endif %}
+      </div>
+      <div class="form-check mb-4">
+        <input class="form-check-input{% if form.agree_to_terms.errors %} is-invalid{% endif %}"
+               type="checkbox" name="agree_to_terms"
+               id="{{ form.agree_to_terms.id_for_label }}"
+               {% if form.agree_to_terms.value %}checked{% endif %}>
+        <label class="form-check-label" for="{{ form.agree_to_terms.id_for_label }}" style="font-size:.8rem">
+          {% trans "I agree to the" %} <a href="#" style="color:var(--accent-light)">{% trans "terms and conditions" %}</a>
+        </label>
+        {% if form.agree_to_terms.errors %}
+        <div class="invalid-feedback d-block">{{ form.agree_to_terms.errors.as_text }}</div>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary w-100">{% trans "Create Account" %}</button>
+    </form>
+    {% endif %}
+
+    <div class="text-center mt-3" style="font-size:.8rem;color:var(--text-secondary)">
+      {% trans "Already have an account?" %}
+      <a href="{% url 'login' %}" style="color:var(--accent-light);font-weight:600">{% trans "Sign In" %}</a>
+    </div>
+
+  </div>
+</div>
+{% endblock content %}

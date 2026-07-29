@@ -1,0 +1,225 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Khách hàng — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold"><i class="fas fa-building me-2 text-primary"></i>Quản lý Khách hàng</h4>
+    <p class="text-muted small mt-1 mb-0">Danh sách client / đối tác sử dụng hệ thống</p>
+  </div>
+  {% if can_manage %}
+  <button class="btn btn-primary" onclick="openClientModal()">
+    <i class="fas fa-plus me-1"></i> Thêm khách hàng
+  </button>
+  {% endif %}
+</div>
+
+{% if client_data %}
+<div class="row g-3" id="clientGrid">
+  {% for row in client_data %}
+  {% with c=row.client %}
+  <div class="col-12 col-sm-6 col-xl-4" id="card-{{ c.pk }}">
+    <div class="card shadow-sm h-100 border-0">
+      <div class="card-body d-flex gap-3">
+        <!-- avatar initials -->
+        <div class="flex-shrink-0">
+          <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
+               style="width:52px;height:52px;background:var(--bs-primary);font-size:1.2rem;">
+            {{ c.name|slice:":2"|upper }}
+          </div>
+        </div>
+        <div class="flex-grow-1 min-w-0">
+          <h6 class="mb-1 fw-semibold text-truncate">
+            <a href="{% url 'client_detail' c.pk %}" class="text-dark text-decoration-none">{{ c.name }}</a>
+          </h6>
+          {% if c.contact_name %}<p class="small text-muted mb-1"><i class="fas fa-user fa-xs me-1"></i>{{ c.contact_name }}</p>{% endif %}
+          {% if c.contact_email %}<p class="small text-muted mb-1 text-truncate"><i class="fas fa-envelope fa-xs me-1"></i>{{ c.contact_email }}</p>{% endif %}
+          {% if c.phone %}<p class="small text-muted mb-1"><i class="fas fa-phone fa-xs me-1"></i>{{ c.phone }}</p>{% endif %}
+          <div class="d-flex gap-2 mt-2">
+            <span class="badge bg-soft-primary text-primary rounded-pill px-2">
+              <i class="fas fa-layer-group fa-xs me-1"></i>{{ row.project_count }} công trường
+            </span>
+            <span class="badge bg-soft-success text-success rounded-pill px-2">
+              <i class="fas fa-camera fa-xs me-1"></i>{{ row.cam_count }} camera
+            </span>
+          </div>
+        </div>
+        {% if can_manage %}
+        <div class="flex-shrink-0 d-flex flex-column gap-1 align-items-end">
+          <button class="btn btn-sm btn-outline-secondary" title="Sửa"
+            onclick="openClientModal('{{ c.pk }}','{{ c.name|escapejs }}','{{ c.contact_name|escapejs }}','{{ c.contact_email|escapejs }}','{{ c.phone|escapejs }}','{{ c.address|escapejs }}','{{ c.notes|escapejs }}')">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" title="Xoá"
+            onclick="deleteClient('{{ c.pk }}','{{ c.name|escapejs }}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="fas fa-building fa-3x mb-3 opacity-25"></i>
+  <p class="mb-2">Chưa có khách hàng nào.</p>
+  {% if can_manage %}
+  <button class="btn btn-primary btn-sm" onclick="openClientModal()">
+    <i class="fas fa-plus me-1"></i>Thêm khách hàng đầu tiên
+  </button>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ===== Modal Add / Edit ===== -->
+<div class="modal fade" id="clientModal" tabindex="-1" aria-labelledby="clientModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold" id="clientModalLabel"><i class="fas fa-building me-2"></i><span id="modalTitle">Thêm khách hàng</span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="clientForm" onsubmit="submitClientForm(event)">
+        {% csrf_token %}
+        <input type="hidden" id="fPk" name="pk" value="">
+        <div class="modal-body">
+          <div id="formError" class="alert alert-danger d-none"></div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Tên khách hàng <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="fName" name="name" placeholder="Công ty ABC..." required maxlength="200">
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Người liên hệ</label>
+              <input type="text" class="form-control" id="fContactName" name="contact_name" maxlength="200">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Điện thoại</label>
+              <input type="text" class="form-control" id="fPhone" name="phone" maxlength="20">
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label fw-semibold">Email liên hệ</label>
+            <input type="email" class="form-control" id="fEmail" name="contact_email" maxlength="254">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Địa chỉ</label>
+            <input type="text" class="form-control" id="fAddress" name="address" maxlength="500">
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold">Ghi chú</label>
+            <textarea class="form-control" id="fNotes" name="notes" rows="2" maxlength="1000"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huỷ</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">
+            <i class="fas fa-save me-1"></i><span id="btnSaveLabel">Lưu</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+.bg-soft-primary{background:rgba(var(--bs-primary-rgb),.12)!important;}
+.bg-soft-success{background:rgba(25,135,84,.12)!important;}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SAVE_URL = "{% url 'client_save' %}";
+const CSRF    = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+function openClientModal(pk, name, contactName, email, phone, address, notes) {
+  const isEdit = !!pk;
+  document.getElementById('modalTitle').textContent = isEdit ? 'Sửa khách hàng' : 'Thêm khách hàng';
+  document.getElementById('btnSaveLabel').textContent = isEdit ? 'Cập nhật' : 'Lưu';
+  document.getElementById('fPk').value          = pk            || '';
+  document.getElementById('fName').value        = name          || '';
+  document.getElementById('fContactName').value = contactName   || '';
+  document.getElementById('fEmail').value       = email         || '';
+  document.getElementById('fPhone').value       = phone         || '';
+  document.getElementById('fAddress').value     = address       || '';
+  document.getElementById('fNotes').value       = notes         || '';
+  document.getElementById('formError').classList.add('d-none');
+  new bootstrap.Modal(document.getElementById('clientModal')).show();
+}
+
+async function submitClientForm(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang lưu...';
+
+  const form   = document.getElementById('clientForm');
+  const data   = new FormData(form);
+  const errDiv = document.getElementById('formError');
+  errDiv.classList.add('d-none');
+
+  try {
+    const res = await fetch(SAVE_URL, {
+      method: 'POST',
+      headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF},
+      body: data,
+    });
+    const json = await res.json();
+    if (json.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('clientModal')).hide();
+      Swal.fire({
+        icon: 'success',
+        title: json.is_new ? 'Đã thêm thành công!' : 'Đã cập nhật!',
+        text: json.name,
+        timer: 1800,
+        showConfirmButton: false,
+      }).then(() => location.reload());
+    } else {
+      errDiv.textContent = json.error || 'Lỗi không xác định.';
+      errDiv.classList.remove('d-none');
+    }
+  } catch (err) {
+    errDiv.textContent = 'Lỗi kết nối: ' + err.message;
+    errDiv.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i><span id="btnSaveLabel">Lưu</span>';
+  }
+}
+
+function deleteClient(pk, name) {
+  Swal.fire({
+    title: 'Xoá khách hàng?',
+    html: `Bạn chắc chắn muốn xoá <strong>${name}</strong>?<br><small class="text-muted">Các công trường liên kết sẽ bị bỏ liên kết.</small>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    cancelButtonText: 'Huỷ',
+    confirmButtonText: 'Xoá',
+  }).then(async (result) => {
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/clients/${pk}/delete/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
+      });
+      const json = await res.json();
+      if (json.ok) {
+        document.getElementById(`card-${pk}`)?.remove();
+        Swal.fire({icon:'success', title:'Đã xoá!', text: json.name, timer:1500, showConfirmButton:false});
+      } else {
+        Swal.fire({icon:'error', title:'Lỗi', text: json.error});
+      }
+    } catch(e) {
+      Swal.fire({icon:'error', title:'Lỗi kết nối', text: e.message});
+    }
+  });
+}
+</script>
+{% endblock %}

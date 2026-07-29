@@ -1,0 +1,162 @@
+{% load i18n %}
+{# ── Modal content: quản lý phân quyền camera (nạp bằng AJAX) ── #}
+<div class="modal-header py-2">
+  <div class="d-flex align-items-center gap-2 flex-grow-1 min-width-0">
+    <code class="bg-light px-2 py-1 rounded small fw-bold flex-shrink-0">{{ camera.code }}</code>
+    <span class="fw-semibold text-truncate">{% trans "Manage access" %}</span>
+    <span class="text-muted small text-truncate">· {{ camera.name }}{% if camera.site %} · {{ camera.site.name }}{% endif %}</span>
+  </div>
+  <button type="button" class="btn-close ms-2 flex-shrink-0" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+
+<div class="modal-body" id="accessModalBody" data-cam-pk="{{ camera.pk }}">
+
+  {% if flash_msg %}
+  <div id="accessFlash" data-msg="{{ flash_msg }}" data-level="{{ flash_level }}" hidden></div>
+  {% endif %}
+
+  {# ── Thanh trên: đếm + nút mở khu cấp quyền ── #}
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <span class="text-muted small">
+      {{ accesses|length }} {% trans "user(s) with access" %}
+    </span>
+    <button type="button" class="btn btn-sm btn-success d-inline-flex align-items-center"
+            data-bs-toggle="collapse" data-bs-target="#grantPanel" aria-expanded="false">
+      <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+      {% trans "Grant access" %}
+    </button>
+  </div>
+
+  {# ── Khu cấp quyền (expand/collapse) ── #}
+  <div class="collapse mb-3" id="grantPanel">
+    <div class="border rounded-3 p-2 bg-light">
+      <form id="grantForm" data-ajax-url="{% url 'access_add' camera.pk %}">
+        {% csrf_token %}
+
+        {# Chip area #}
+        <div id="chips_area"
+             class="d-flex flex-wrap gap-1 mb-2 p-2 rounded"
+             style="min-height:32px;border:1px solid #dee2e6;background:#fff">
+          <span class="text-muted small align-self-center" id="chips_placeholder">{% trans "No users selected yet" %}</span>
+        </div>
+
+        {# Search + dropdown #}
+        <div class="position-relative mb-2">
+          <input type="text" id="user_search_input"
+                 class="form-control form-control-sm"
+                 placeholder="{% trans 'Type a name to search…' %}"
+                 autocomplete="off">
+          <div id="user_dropdown"
+               style="display:none;position:absolute;left:0;right:0;z-index:1060;
+                      max-height:160px;overflow-y:auto;background:#fff;
+                      border:1px solid #dee2e6;border-radius:.375rem;
+                      box-shadow:0 4px 12px rgba(0,0,0,.1)">
+            {% for u in unassigned_users %}
+            <div class="user-option px-3 py-2"
+                 data-pk="{{ u.pk }}"
+                 data-name="{{ u.username }}"
+                 style="cursor:pointer;border-bottom:1px solid #f5f5f5">
+              <span class="fw-semibold small">{{ u.username }}</span>
+              {% if u.email %}<span class="text-muted small ms-2">{{ u.email }}</span>{% endif %}
+            </div>
+            {% empty %}
+            <p class="text-muted text-center small py-3 mb-0">{% trans "Everyone already has access." %}</p>
+            {% endfor %}
+          </div>
+        </div>
+        <div id="hidden_users"></div>
+
+        {# Permissions + actions trên 1 dòng #}
+        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mt-1">
+          <div class="d-flex align-items-center gap-3">
+            <span class="small fw-semibold text-muted">{% trans "Permissions" %}:</span>
+            <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_view" checked class="form-check-input mt-0"><span class="small">{% trans "View" %}</span></label>
+            <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_manage" class="form-check-input mt-0"><span class="small">{% trans "Manage" %}</span></label>
+            <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_download" class="form-check-input mt-0"><span class="small">{% trans "Download" %}</span></label>
+            <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_delete_media" class="form-check-input mt-0"><span class="small text-danger">{% trans "Delete media" %}</span></label>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="collapse" data-bs-target="#grantPanel">{% trans "Cancel" %}</button>
+            <button type="submit" class="btn btn-sm btn-success">{% trans "Grant access" %}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Danh sách người có quyền ── #}
+  <div class="rounded-3 border" style="max-height:300px;overflow-y:auto">
+    {% for acc in accesses %}
+    <div class="px-3 py-3{% if not forloop.last %} border-bottom{% endif %}">
+      <div class="d-flex align-items-start gap-3">
+        {# Avatar chữ cái #}
+        <div class="flex-shrink-0 rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
+             style="width:38px;height:38px;font-size:.95rem;background:hsl({{ acc.user.pk }}00 , 55%, 52%);user-select:none">
+          {{ acc.user.username|slice:":1"|upper }}
+        </div>
+        {# Thông tin #}
+        <div class="flex-grow-1 min-width-0">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="fw-semibold">{{ acc.user.username }}</span>
+            {% if acc.user.email %}<small class="text-muted">{{ acc.user.email }}</small>{% endif %}
+          </div>
+          <div class="d-flex flex-wrap gap-1">
+            {% if acc.can_view %}<span class="badge rounded-pill" style="background:#e8f0fe;color:#3b5bdb;font-weight:500">{% trans "View" %}</span>{% endif %}
+            {% if acc.can_manage %}<span class="badge rounded-pill" style="background:#e3f9f5;color:#0ca678;font-weight:500">{% trans "Manage" %}</span>{% endif %}
+            {% if acc.can_download %}<span class="badge rounded-pill" style="background:#ebfbee;color:#2f9e44;font-weight:500">{% trans "Download" %}</span>{% endif %}
+            {% if acc.can_delete_media %}<span class="badge rounded-pill" style="background:#fff5f5;color:#e03131;font-weight:500">{% trans "Delete media" %}</span>{% endif %}
+            {% if not acc.can_view and not acc.can_manage and not acc.can_download and not acc.can_delete_media %}<span class="badge rounded-pill" style="background:#f1f3f5;color:#868e96;font-weight:500">{% trans "No permissions" %}</span>{% endif %}
+          </div>
+          {# Edit inline expand #}
+          <div class="collapse mt-2" id="editRow{{ acc.pk }}">
+            <form class="js-edit-form p-2 rounded-2" style="background:#f8f9fa;border:1px solid #dee2e6" data-ajax-url="{% url 'access_edit' acc.pk %}">
+              {% csrf_token %}
+              <div class="d-flex flex-wrap gap-3 mb-2">
+                <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_view" class="form-check-input mt-0" {% if acc.can_view %}checked{% endif %}><span class="small">{% trans "View" %}</span></label>
+                <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_manage" class="form-check-input mt-0" {% if acc.can_manage %}checked{% endif %}><span class="small">{% trans "Manage" %}</span></label>
+                <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_download" class="form-check-input mt-0" {% if acc.can_download %}checked{% endif %}><span class="small">{% trans "Download" %}</span></label>
+                <label class="d-flex align-items-center gap-1"><input type="checkbox" name="can_delete_media" class="form-check-input mt-0" {% if acc.can_delete_media %}checked{% endif %}><span class="small text-danger">{% trans "Delete media" %}</span></label>
+              </div>
+              <div class="text-end">
+                <button type="button" class="btn btn-xs btn-outline-secondary"
+                        data-bs-toggle="collapse" data-bs-target="#editRow{{ acc.pk }}">{% trans "Cancel" %}</button>
+                <button type="submit" class="btn btn-xs btn-primary">{% trans "Save changes" %}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        {# Actions #}
+        <div class="d-flex align-items-center gap-1 flex-shrink-0 mt-1">
+          <button type="button" class="btn btn-xs btn-icon btn-outline-primary"
+                  data-bs-toggle="collapse" data-bs-target="#editRow{{ acc.pk }}" title="{% trans 'Edit' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+          </button>
+          <button type="button" class="btn btn-xs btn-icon btn-outline-danger js-revoke"
+                  data-ajax-url="{% url 'access_remove' acc.pk %}"
+                  data-username="{{ acc.user.username }}" title="{% trans 'Revoke' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="text-center text-muted py-5">
+      <svg class="mb-2" style="width:2.5rem;height:2.5rem;opacity:.35" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      <p class="small mb-0">{% trans "No users have been granted access to this camera." %}</p>
+    </div>
+    {% endfor %}
+  </div>{# /scroll-wrapper #}
+
+</div>
+<div class="modal-footer d-flex align-items-center justify-content-between py-2 px-3">
+  <small class="text-muted">
+    {% load i18n %}
+    {% if accesses %}
+      {{ accesses|length }} {% trans "user(s) have access to this camera" %}
+    {% else %}
+      {% trans "No one has access yet — grant access above" %}
+    {% endif %}
+  </small>
+  <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
+</div>

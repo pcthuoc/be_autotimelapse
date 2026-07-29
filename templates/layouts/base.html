@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="vi" id="htmlRoot">
+<head>
+  {# ── Theme init — must run BEFORE any CSS paint ── #}
+  <script>(function(){var t=localStorage.getItem('bb-theme')||'dark';document.getElementById('htmlRoot').className=t==='light'?'light':'';})();</script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>{% block title %}{% endblock %} — AutoTimelapse</title>
+  <meta name="theme-color" content="#1a1a1a">
+
+  <!-- Favicon -->
+  <link rel="apple-touch-icon" sizes="120x120" href="/static/assets/img/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/img/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/img/favicon/favicon-16x16.png">
+  <link rel="manifest" href="/static/assets/img/favicon/site.webmanifest">
+
+  <!-- SweetAlert2 CSS -->
+  <link rel="stylesheet" href="/static/assets/vendor/sweetalert2/dist/sweetalert2.min.css">
+  <!-- Notyf CSS -->
+  <link rel="stylesheet" href="/static/assets/vendor/notyf/notyf.min.css">
+  <!-- Bootstrap 5 base (grid, utilities) -->
+  <link rel="stylesheet" href="/static/assets/css/volt.css">
+  <!-- Bambuddy dark theme (overrides Volt) -->
+  <link rel="stylesheet" href="/static/assets/css/bambuddy-theme.css">
+
+  {% block stylesheets %}{% endblock stylesheets %}
+</head>
+<body>
+
+  {# ── Sidebar ── #}
+  {% include 'includes/sidebar.html' %}
+
+  {# ── Mobile top bar ── #}
+  <div class="topbar-mobile" id="topbarMobile">
+    <button class="topbar-burger" id="sidebarToggleBtn" aria-label="Toggle sidebar">
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+    <span class="topbar-mobile-brand">AutoTimelapse</span>
+    <span style="font-size:.75rem;color:var(--text-muted)">{{ request.user.username }}</span>
+  </div>
+
+  {# ── Sidebar backdrop (mobile) ── #}
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  {# ── Main content ── #}
+  <main class="content" id="mainContent">
+    <div class="content-body animate-fade-in">
+      {% block content %}{% endblock content %}
+    </div>
+    {% include 'includes/footer.html' %}
+  </main>
+
+  {# ── Scripts ── #}
+  {% include 'includes/scripts.html' %}
+
+  {# ── Mobile sidebar JS ── #}
+  <script>
+  (function () {
+    var toggle = document.getElementById('sidebarToggleBtn');
+    var backdrop = document.getElementById('sidebarBackdrop');
+    var sidebar = document.getElementById('sidebarMenu');
+    function openSidebar() {
+      sidebar && sidebar.classList.add('show');
+      backdrop && backdrop.classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeSidebar() {
+      sidebar && sidebar.classList.remove('show');
+      backdrop && backdrop.classList.remove('show');
+      document.body.style.overflow = '';
+    }
+    toggle && toggle.addEventListener('click', function () {
+      sidebar && sidebar.classList.contains('show') ? closeSidebar() : openSidebar();
+    });
+    backdrop && backdrop.addEventListener('click', closeSidebar);
+  }());
+  </script>
+
+  {% block javascripts %}{% endblock javascripts %}
+
+  {# ── Django messages → Notyf toasts ── #}
+  {% if messages %}
+  <script>
+  (function () {
+    var notyf = new Notyf({ duration: 4000, position: { x: 'right', y: 'top' }, dismissible: true });
+    {% for m in messages %}
+      {% if 'error' in m.tags %}notyf.error("{{ m|escapejs }}");
+      {% elif 'warning' in m.tags %}notyf.open({ type: 'warning', background: '#f59e0b', message: "{{ m|escapejs }}" });
+      {% else %}notyf.success("{{ m|escapejs }}");
+      {% endif %}
+    {% endfor %}
+  }());
+  </script>
+  {% endif %}
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+// style.scss — build entry point
+// Import order: vars → base → components → pages
+@import "vars";
+@import "base";
+
+// Add page/component imports below as features are built:
+// @import "camera";
+// @import "timelapse";

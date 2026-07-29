@@ -1,0 +1,7 @@
+// vars-default.scss — light theme overrides
+@import "vars-common";
+
+$color_bg_body:   #F0F2F5;
+$color_sidebar:   #FFFFFF;
+$color_navbar:    #FFFFFF;
+$color_card_text: $color_header_text;

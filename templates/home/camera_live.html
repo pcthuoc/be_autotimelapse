@@ -1,0 +1,399 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Live – {{ camera.code }}{% endblock %}
+
+{% block stylesheets %}
+<style>
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .5; transform: scale(1.4); }
+}
+.dot-live {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulse-live 1.5s infinite;
+}
+.status-btn-group .btn { min-width: 88px; }
+.live-photo-wrap { background: #111; min-height: 300px; border-radius: 0 0 .5rem .5rem; overflow: hidden; }
+.live-photo-wrap img { display: block; width: 100%; max-height: 72vh; object-fit: contain; }
+.photo-overlay {
+  background: linear-gradient(transparent, rgba(0,0,0,.65));
+  padding: .5rem 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  {# ── Back + Title ── #}
+  <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+    <a href="{% url 'camera_list' %}" class="btn btn-sm btn-outline-secondary">
+      ← {% trans "Cameras" %}
+    </a>
+    <h4 class="mb-0 fw-bold text-truncate" style="max-width:340px">
+      <code class="fs-6">{{ camera.code }}</code>
+      <span class="text-muted fw-normal">— {{ camera.name }}</span>
+    </h4>
+
+    {# Status badge #}
+    {% if camera.status == "active" %}
+      <span id="status-badge" class="badge bg-success-soft text-success">
+        <span class="dot-live bg-success me-1"></span>{% trans "Active" %}
+      </span>
+    {% elif camera.status == "maintenance" %}
+      <span id="status-badge" class="badge bg-warning-soft text-warning">
+        <span class="dot-live bg-warning me-1"></span>{% trans "Maintenance" %}
+      </span>
+    {% else %}
+      <span id="status-badge" class="badge bg-secondary-soft text-secondary">
+        <span class="dot-live bg-secondary me-1"></span>{% trans "Inactive" %}
+      </span>
+    {% endif %}
+
+    {# Live indicator #}
+    <span id="live-indicator" class="ms-auto d-flex align-items-center gap-2 text-success small fw-bold">
+      <span class="dot-live bg-success"></span> LIVE
+    </span>
+    <span id="live-paused" class="ms-auto d-flex align-items-center gap-2 text-muted small" style="display:none!important">
+      PAUSED
+    </span>
+  </div>
+
+  <div class="row g-4">
+
+    {# ══════════════ LEFT PANEL ══════════════ #}
+    <div class="col-12 col-lg-4 d-flex flex-column gap-3">
+
+      {# Status control #}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-transparent border-0 pb-0">
+          <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Status" %}</span>
+        </div>
+        <div class="card-body pt-2">
+          {% if can_manage %}
+          <div class="btn-group status-btn-group w-100" role="group" aria-label="Camera status">
+            <button type="button"
+                    class="btn btn-sm {% if camera.status == 'active' %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                    data-status-btn="active"
+                    onclick="setStatus('active')">
+              {% trans "Active" %}
+            </button>
+            <button type="button"
+                    class="btn btn-sm {% if camera.status == 'maintenance' %}btn-warning{% else %}btn-outline-secondary{% endif %}"
+                    data-status-btn="maintenance"
+                    onclick="setStatus('maintenance')">
+              {% trans "Maintenance" %}
+            </button>
+            <button type="button"
+                    class="btn btn-sm {% if camera.status == 'inactive' %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+                    data-status-btn="inactive"
+                    onclick="setStatus('inactive')">
+              {% trans "Inactive" %}
+            </button>
+          </div>
+          {% else %}
+          <p class="mb-0 text-muted small">{{ camera.get_status_display }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Stats #}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-transparent border-0 pb-0">
+          <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Stats" %}</span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted ps-3">{% trans "Photos today" %}</td>
+                <td class="pe-3 text-end"><strong id="stat-today">{{ today_count }}</strong></td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3">{% trans "Total photos" %}</td>
+                <td class="pe-3 text-end"><strong>{{ total_count }}</strong></td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3">{% trans "Last photo" %}</td>
+                <td class="pe-3 text-end small" id="stat-last-time">
+                  {{ latest.taken_at|default:"—" }}
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3">{% trans "Site" %}</td>
+                <td class="pe-3 text-end small">{{ camera.site.name|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-3">{% trans "Timezone" %}</td>
+                <td class="pe-3 text-end small">{{ camera.timezone }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# Auto-refresh control #}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-transparent border-0 pb-0">
+          <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Auto-refresh" %}</span>
+        </div>
+        <div class="card-body pt-2">
+          <select id="refresh-select" class="form-select form-select-sm mb-2">
+            <option value="10">10 {% trans "seconds" %}</option>
+            <option value="30" selected>30 {% trans "seconds" %}</option>
+            <option value="60">1 {% trans "minute" %}</option>
+            <option value="120">2 {% trans "minutes" %}</option>
+            <option value="0">{% trans "Off" %}</option>
+          </select>
+          <button id="btn-refresh-now" class="btn btn-sm btn-outline-primary w-100"
+                  onclick="refreshNow()">
+            ↻ {% trans "Refresh now" %}
+          </button>
+        </div>
+      </div>
+
+      {# Links #}
+      <a href="{% url 'media_gallery' camera.pk %}" class="btn btn-sm btn-outline-secondary">
+        {% trans "View Gallery" %} →
+      </a>
+
+    </div>{# /left #}
+
+    {# ══════════════ RIGHT PANEL: photo ══════════════ #}
+    <div class="col-12 col-lg-8">
+    {# ══════════════ LIVE VIEW realtime ══════════════ #}
+      <div class="card border-0 shadow-sm mb-4" id="liveViewBox"
+           data-start-url="{% url 'live_view_start' camera.pk %}"
+           data-stop-url="{% url 'live_view_stop' camera.pk %}"
+           data-frame-url="{% url 'live_view_frame' camera.pk %}"
+           data-msg-starting="{% trans 'Starting live view…' %}"
+           data-msg-waiting="{% trans 'Waiting for camera frame…' %}"
+           data-msg-stopped="{% trans 'Live view stopped.' %}">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between pb-0">
+          <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Live View" %}</span>
+          <div class="d-flex align-items-center gap-2">
+            <span id="lvState" class="small text-muted">{% trans "Off" %}</span>
+            <button id="lvToggle" type="button" class="btn btn-xs btn-outline-danger"
+                    data-label-start="▶ {% trans 'Start live view' %}"
+                    data-label-stop="■ {% trans 'Stop' %}">
+              ▶ {% trans "Start live view" %}
+            </button>
+          </div>
+        </div>
+        <div class="live-photo-wrap">
+          <img id="lvFrame" alt="live frame" style="display:none">
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between pb-0">
+          <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Latest Photo" %}</span>
+          <span id="refresh-spinner" class="spinner-border spinner-border-sm text-muted" role="status"
+                style="display:none!important">
+            <span class="visually-hidden">Loading…</span>
+          </span>
+        </div>
+        <div class="live-photo-wrap position-relative">
+          {% if latest_url %}
+          <img id="live-photo" src="{{ latest_url }}" alt="Latest photo">
+          {% else %}
+          <div id="no-photo-msg"
+               class="d-flex flex-column align-items-center justify-content-center text-muted"
+               style="height:300px">
+            <svg class="icon mb-2" style="width:3rem;height:3rem" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <p class="mb-0 small">{% trans "No photos yet." %}</p>
+          </div>
+          {% endif %}
+
+          {# Bottom overlay #}
+          <div class="photo-overlay position-absolute bottom-0 start-0 end-0 d-flex justify-content-between align-items-center">
+            <span id="photo-timestamp" class="text-white small">
+              {% if latest %}{{ latest.taken_at|date:"Y-m-d H:i:s" }} UTC{% else %}—{% endif %}
+            </span>
+            <div class="d-flex gap-2">
+              {% if latest %}
+              <a id="photo-fullsize-link" href="{% url 'media_serve' latest.pk %}"
+                 class="btn btn-xs btn-outline-light" target="_blank" rel="noopener">
+                ↗ {% trans "Full size" %}
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>{# /live-photo-wrap #}
+      </div>
+    </div>{# /right #}
+
+  </div>{# /row #}
+</div>{# /container #}
+{% endblock %}
+
+{% block javascripts %}
+<script src="/static/assets/js/live_view.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const LATEST_URL   = "{% url 'camera_live_latest' camera.pk %}";
+  const SETTINGS_URL = "{% url 'camera_live_settings' camera.pk %}";
+  const CSRF_TOKEN   = "{{ csrf_token }}";
+
+  let refreshTimer   = null;
+  let refreshSecs    = 30;
+  let lastPhotoId    = "{{ latest.pk|default:'' }}";
+  let isFetching     = false;
+
+  // ── Refresh control ──────────────────────────────────────────────────────
+
+  function startTimer() {
+    clearInterval(refreshTimer);
+    if (refreshSecs > 0) {
+      refreshTimer = setInterval(doRefresh, refreshSecs * 1000);
+      showLiveIndicator(true);
+    } else {
+      showLiveIndicator(false);
+    }
+  }
+
+  document.getElementById('refresh-select').addEventListener('change', function () {
+    refreshSecs = parseInt(this.value, 10);
+    startTimer();
+  });
+
+  function showLiveIndicator(on) {
+    document.getElementById('live-indicator').style.display = on ? '' : 'none';
+    document.getElementById('live-paused').style.display   = on ? 'none' : '';
+  }
+
+  function showSpinner(on) {
+    document.getElementById('refresh-spinner').style.display = on ? '' : 'none';
+  }
+
+  function refreshNow() {
+    clearInterval(refreshTimer);
+    doRefresh().finally(startTimer);
+  }
+  window.refreshNow = refreshNow;
+
+  // ── Fetch latest photo ───────────────────────────────────────────────────
+
+  function doRefresh() {
+    if (isFetching) return Promise.resolve();
+    isFetching = true;
+    showSpinner(true);
+
+    return fetch(LATEST_URL, { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.photo) return;
+
+        // Update photo (only swap src if photo changed — saves bandwidth)
+        const img = document.getElementById('live-photo');
+        const noMsg = document.getElementById('no-photo-msg');
+
+        if (noMsg) noMsg.style.display = 'none';
+
+        if (data.photo.id !== lastPhotoId) {
+          lastPhotoId = data.photo.id;
+          if (img) {
+            img.src = data.photo.url;
+          } else {
+            // Create image element the first time
+            const wrap = document.querySelector('.live-photo-wrap');
+            const newImg = document.createElement('img');
+            newImg.id = 'live-photo';
+            newImg.alt = 'Latest photo';
+            newImg.src = data.photo.url;
+            wrap.insertBefore(newImg, wrap.firstChild);
+          }
+
+          // Update full-size link
+          const link = document.getElementById('photo-fullsize-link');
+          if (link) {
+            link.href = '/media/' + data.photo.id + '/view/';
+          }
+        }
+
+        // Always update timestamp display
+        const ts = new Date(data.photo.taken_at);
+        document.getElementById('photo-timestamp').textContent =
+          data.photo.taken_at_display;
+        document.getElementById('stat-last-time').textContent =
+          data.photo.taken_at_display;
+
+        // Update stats
+        if (data.stats) {
+          document.getElementById('stat-today').textContent = data.stats.today_count;
+        }
+      })
+      .catch(function (err) {
+        console.warn('Live refresh error:', err);
+      })
+      .finally(function () {
+        isFetching = false;
+        showSpinner(false);
+      });
+  }
+
+  // ── Status change ────────────────────────────────────────────────────────
+
+  {% if can_manage %}
+  function setStatus(status) {
+    fetch(SETTINGS_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': CSRF_TOKEN,
+      },
+      body: JSON.stringify({ status: status }),
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.ok) updateStatusUI(data.status);
+    })
+    .catch(function (err) { console.warn('setStatus error:', err); });
+  }
+  window.setStatus = setStatus;
+
+  function updateStatusUI(status) {
+    // Badge
+    const badge = document.getElementById('status-badge');
+    const cfg = {
+      active:      { cls: 'bg-success-soft text-success', dot: 'bg-success',   label: 'Active' },
+      maintenance: { cls: 'bg-warning-soft text-warning',   dot: 'bg-warning',   label: 'Maintenance' },
+      inactive:    { cls: 'bg-secondary-soft text-secondary', dot: 'bg-secondary', label: 'Inactive' },
+    };
+    const c = cfg[status] || cfg.inactive;
+    badge.className = 'badge ' + c.cls;
+    badge.innerHTML = '<span class="dot-live ' + c.dot + ' me-1"></span>' + c.label;
+
+    // Buttons
+    document.querySelectorAll('[data-status-btn]').forEach(function (btn) {
+      const s = btn.dataset.statusBtn;
+      const active = s === status;
+      btn.className = btn.className
+        .replace(/btn-(success|warning|secondary|outline-secondary)/g, '')
+        .trim();
+      if (s === 'active')      btn.classList.add(active ? 'btn-success'     : 'btn-outline-secondary');
+      if (s === 'maintenance') btn.classList.add(active ? 'btn-warning'     : 'btn-outline-secondary');
+      if (s === 'inactive')    btn.classList.add(active ? 'btn-secondary'   : 'btn-outline-secondary');
+    });
+  }
+  {% endif %}
+
+  // ── Start ────────────────────────────────────────────────────────────────
+  startTimer();
+
+}());
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django local settings & secrets
+local_settings.py
+db.sqlite3
+staticfiles/
+
+# OS
+.DS_Store
+Thumbs.db

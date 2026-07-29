@@ -1,0 +1,489 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ camera.code }} — Media{% endblock %}
+
+{% block stylesheets %}
+<style>
+.media-item { transition: transform .15s ease, box-shadow .15s ease; cursor: pointer; }
+.media-item:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.12) !important; }
+.media-item .media-thumb { transition: transform .35s ease; }
+.media-item:hover .media-thumb { transform: scale(1.06); }
+.media-item .card-body { border-top: 1px solid #f1f3f5; }
+.bg-primary-soft { background: rgba(13,110,253,.12); }
+
+/* ── Toolbar grouping ── */
+.media-toolbar { display:grid; gap:.75rem; }
+.media-toolbar-row { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; }
+.media-toolbar-row + .media-toolbar-row { padding-top:.75rem; border-top:1px solid #edf0f3; }
+.media-toolbar .tool-group { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.media-toolbar .tool-group-end { margin-left:auto; justify-content:flex-end; }
+.media-toolbar .btn { display:inline-flex; align-items:center; gap:.25rem; }
+.media-toolbar .badge { display:inline-flex; align-items:center; justify-content:center; height:1.75rem; }
+@media (max-width:767.98px) {
+  .media-toolbar-row, .media-toolbar .tool-group, .media-toolbar .tool-group-end { width:100%; }
+  .media-toolbar .tool-group-end { margin-left:0; justify-content:flex-start; }
+  .media-toolbar input[type="date"], .media-toolbar select { flex:1; min-width:0; max-width:none !important; }
+  .media-toolbar input[type="datetime-local"] { flex:1 1 calc(50% - 1.5rem); min-width:9rem; max-width:none !important; }
+}
+
+/* ── Lightbox enhancements ── */
+#imgModal .modal-dialog { width:min(94vw, 1400px); max-width:none; margin-left:auto; margin-right:auto; }
+#imgModal .modal-content { border:none; height:min(92vh, 940px); overflow:hidden; background:#111820 !important; }
+#imgModal .modal-header { padding:.5rem .75rem; background:#111820; }
+#imgModal .modal-body { display:flex; align-items:center; justify-content:center; min-height:0 !important; overflow:hidden; background:#080b0f; }
+#imgModalImg { display:block; width:auto !important; height:auto; max-width:100%; max-height:calc(min(92vh, 940px) - 3.5rem) !important; object-fit:contain; }
+#imgModal .lb-nav {
+  position:absolute; top:50%; width:2.75rem; height:3.5rem; display:flex; align-items:center; justify-content:center;
+  color:#fff; background:rgba(0,0,0,.48); border:1px solid rgba(255,255,255,.2); border-radius:.375rem;
+  font-size:2rem; line-height:1; opacity:.82; transform:translateY(-50%); transition:opacity .2s, background-color .2s; z-index:10;
+}
+#imgModal .lb-nav:hover { opacity:1; background:rgba(0,0,0,.72); }
+#imgModal .lb-nav.prev { left:.75rem; }
+#imgModal .lb-nav.next { right:.75rem; }
+#imgModal .btn-close { width:.8rem; height:.8rem; }
+@media (max-width:575.98px) {
+  #imgModal .modal-dialog { width:100vw; height:100vh; margin:0; }
+  #imgModal .modal-content { height:100vh; border-radius:0; }
+  #imgModalImg { max-height:calc(100vh - 3.5rem) !important; }
+  #imgModal .lb-nav { width:2.5rem; height:3rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<form id="csrfHolder" class="d-none">{% csrf_token %}</form>
+
+{# ── Header ─────────────────────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'camera_list' %}" class="btn btn-sm btn-icon btn-outline-secondary rounded-circle"
+       title="{% trans 'Back to cameras' %}">
+      <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <div>
+      <h2 class="h4 fw-bold mb-1 d-flex align-items-center gap-2 flex-wrap">
+        <code class="bg-light px-2 py-1 rounded fs-6">{{ camera.code }}</code>
+        <span>{{ camera.name }}</span>
+      </h2>
+      <div class="d-flex align-items-center gap-3 text-muted small">
+        {% if camera.site.name %}
+        <span class="d-inline-flex align-items-center gap-1">
+          <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          {{ camera.site.name }}
+        </span>
+        {% endif %}
+        <span class="d-inline-flex align-items-center gap-1">
+          <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <strong class="text-body">{{ total }}</strong> {% trans "photos" %}
+        </span>
+        {% if active_date %}
+        <span class="badge bg-primary-soft text-primary">{{ active_date }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-sm btn-dark d-inline-flex align-items-center gap-1" id="btnDownloads" data-bs-toggle="modal" data-bs-target="#dlModal">
+    <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    {% trans "Download bundle" %}
+  </button>
+</div>
+
+{# ── Toolbar: chọn ngày + gom tải ───────────────────────────────────────────── #}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2 media-toolbar">
+    <div class="media-toolbar-row">
+      {# Date selection #}
+      <div class="tool-group">
+        <span class="small text-muted">{% trans "Date" %}:</span>
+        <input type="date" id="dateJump" value="{{ active_date }}" class="form-control form-control-sm" style="max-width:160px">
+        {% if active_date %}
+        <a href="{% url 'media_gallery' camera.pk %}" class="btn btn-sm btn-outline-secondary">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>{% trans "All" %}
+        </a>
+        {% endif %}
+        {% if day_stats %}
+        <select id="daySelect" class="form-select form-select-sm" style="max-width:220px">
+          <option value="">{% trans "— Quick select date —" %}</option>
+          {% for d in day_stats %}
+          <option value="{{ d.day|date:'Y-m-d' }}" {% if d.day|date:'Y-m-d' == active_date %}selected{% endif %}>
+            {{ d.day|date:'d/m/Y' }} ({{ d.count }})
+          </option>
+          {% endfor %}
+        </select>
+        {% endif %}
+      </div>
+
+      {% if can_download %}
+      <div class="tool-group tool-group-end">
+        <button class="btn btn-sm btn-outline-secondary" id="selAll">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>{% trans "Select all" %}
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" id="selClear">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>{% trans "Deselect" %}
+        </button>
+        <span class="badge bg-primary rounded-pill" id="selCount" style="min-width:1.75rem">0</span>
+        <button class="btn btn-sm btn-primary" id="dlSelected" disabled>
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>{% trans "Download selected" %}
+        </button>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if can_download %}
+    <div class="media-toolbar-row">
+      <div class="tool-group">
+        {% if active_date %}
+        <button class="btn btn-sm btn-outline-primary" id="dlDay" data-day="{{ active_date }}">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>{% trans "Download all today" %}
+        </button>
+        {% endif %}
+      </div>
+
+      {# Range download #}
+      <div class="tool-group tool-group-end">
+        <span class="small text-muted">{% trans "Range" %}:</span>
+        <input type="datetime-local" id="dtFrom" class="form-control form-control-sm" style="max-width:170px">
+        <span class="small text-muted">→</span>
+        <input type="datetime-local" id="dtTo" class="form-control form-control-sm" style="max-width:170px">
+        <button class="btn btn-sm btn-outline-primary" id="dlRange">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>{% trans "Download range" %}
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Grid + phân trang (swap bằng AJAX) ──────────────────────────────────────── #}
+<div class="position-relative" id="galleryWrap">
+  <div id="galleryBody">
+    {% include "home/_media_page.html" %}
+  </div>
+  <div id="gallerySpinner" class="position-absolute top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center"
+       style="background:rgba(255,255,255,.6);z-index:5">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Modals ─────────────────────────────────────────────────────────────────── #}
+{% block content_extra %}{% endblock %}
+
+{% block javascripts %}
+{# Lightbox xem ảnh #}
+<div class="modal fade" id="imgModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-0 py-2 d-flex align-items-center">
+        <span class="text-white small fw-semibold flex-grow-1 text-truncate" id="imgModalTitle"></span>
+        <div class="d-flex gap-2 align-items-center">
+          {% if can_download %}
+          <a class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" id="imgModalDl" href="#">
+            <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>{% trans "Download photo" %}
+          </a>
+          {% endif %}
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="modal-body p-0 position-relative">
+        <div id="imgSpinner" class="position-absolute top-50 start-50 translate-middle z-1">
+          <div class="spinner-border text-light" role="status"></div>
+        </div>
+        <img id="imgModalImg" src="" alt="" class="w-100" style="max-height:80vh;object-fit:contain">
+        <button class="lb-nav prev" id="imgPrev" aria-label="{% trans 'Previous' %}">‹</button>
+        <button class="lb-nav next" id="imgNext" aria-label="{% trans 'Next' %}">›</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Gói tải (ảnh ZIP + video renders của camera này) #}
+<div class="modal fade" id="dlModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header py-2 border-bottom">
+        <h5 class="modal-title h6 mb-0 fw-bold d-flex align-items-center gap-2">
+          <svg class="icon icon-xs text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Quản lý tải xuống
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs px-3 pt-2" id="dlTabs">
+          <li class="nav-item">
+            <button class="nav-link active small fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-archives" type="button">
+              <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+              </svg>
+              Gói ảnh ZIP
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link small fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-renders" type="button" id="tabRendersBtn">
+              <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"/>
+              </svg>
+              Video Renders
+            </button>
+          </li>
+        </ul>
+        <div class="tab-content px-3 py-3">
+          <!-- Archives tab -->
+          <div class="tab-pane fade show active" id="tab-archives">
+            <p class="small text-muted mb-2">{% trans "Archive is created in the background. When status is Ready, click to download. Link expires after some time." %}</p>
+            <div id="dlList"><div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm"></div></div></div>
+          </div>
+          <!-- Renders tab -->
+          <div class="tab-pane fade" id="tab-renders">
+            <p class="small text-muted mb-2">Video timelapse đã render cho camera này.</p>
+            <div id="dlRenderList">
+              {% if renders %}
+              {% for vr in renders %}
+              <div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
+                <div class="me-2">
+                  <div class="d-flex align-items-center gap-2">
+                    {% if vr.status == 'ready' %}<span class="badge bg-success">Sẵn sàng</span>
+                    {% elif vr.status == 'processing' %}<span class="badge bg-warning text-dark">Đang render {{ vr.progress }}%</span>
+                    {% elif vr.status == 'pending' %}<span class="badge bg-secondary">Chờ</span>
+                    {% else %}<span class="badge bg-danger">Lỗi</span>{% endif %}
+                    <span class="small text-muted">{{ vr.created_at|date:"H:i d/m/Y" }}</span>
+                  </div>
+                  <div class="small mt-1">{{ vr.date_from|date:"d/m/Y" }} → {{ vr.date_to|date:"d/m/Y" }} · {{ vr.fps }}fps · {{ vr.resolution }}
+                    {% if vr.size_bytes %} · {{ vr.size_bytes|filesizeformat }}{% endif %}
+                  </div>
+                </div>
+                <div>
+                  {% if vr.status == 'ready' %}
+                  <a href="{% url 'render_download' vr.pk %}" class="btn btn-sm btn-success">Tải MP4</a>
+                  {% elif vr.status == 'processing' or vr.status == 'pending' %}
+                  <div class="spinner-border spinner-border-sm text-primary"></div>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
+              {% else %}
+              <div class="text-center text-muted py-3">Chưa có video render nào cho camera này.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Render Video Modal ──────────────────────────────────────────────── #}
+{% if can_render %}
+<div class="modal fade" id="renderModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white py-2">
+        <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+          <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+          </svg>
+          Tạo Video Timelapse
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="renderModalForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div id="renderModalError" class="alert alert-danger d-none mb-3"></div>
+          <p class="small text-muted mb-3">
+            Camera: <strong>{{ camera.name }}</strong>
+            {% if camera.site %} · {{ camera.site.name }}{% endif %}
+          </p>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Từ ngày giờ <span class="text-danger">*</span></label>
+              <input type="datetime-local" name="date_from_dt" id="rmDateFrom"
+                     class="form-control" required>
+              <div class="form-text">Bao gồm cả giờ/phút bắt đầu</div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Đến ngày giờ <span class="text-danger">*</span></label>
+              <input type="datetime-local" name="date_to_dt" id="rmDateTo"
+                     class="form-control" required>
+              <div class="form-text">Bao gồm cả giờ/phút kết thúc</div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">FPS</label>
+              <select name="fps" class="form-select">
+                <option value="6">6 fps — Chậm (phù hợp tuần/tháng)</option>
+                <option value="12">12 fps — Trung bình</option>
+                <option value="24" selected>24 fps — Chuẩn (ngày/tuần)</option>
+                <option value="30">30 fps — Mượt</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Độ phân giải</label>
+              <select name="resolution" class="form-select">
+                {% for val, label in resolution_choices %}
+                <option value="{{ val }}" {% if val == '1920x1080' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="alert alert-info mt-3 small mb-0 d-flex align-items-start gap-2">
+            <svg class="icon icon-xs flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>Render chạy nền — bạn có thể rời trang và quay lại sau. Theo dõi tiến trình tại phần <strong>Video Renders</strong> phía trên.</div>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Huỷ</button>
+          <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" id="rmSubmitBtn" onclick="submitRenderModal()">
+            <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Bắt đầu render
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div id="galleryConfig"
+     data-camera="{{ camera.pk }}"
+     data-archive-create="{% url 'media_archive_create' camera.pk %}"
+     data-archive-list="{% url 'media_archive_list' %}"
+     data-gallery-url="{% url 'media_gallery' camera.pk %}"
+     data-render-create="{% url 'render_create' camera_pk=camera.pk %}"
+     data-can-download="{{ can_download|yesno:'1,0' }}"
+     data-can-render="{{ can_render|yesno:'1,0' }}"
+     hidden></div>
+
+<script src="/static/assets/js/media_gallery.js"></script>
+
+{% if can_render %}
+<script>
+(function() {
+  var RENDER_URL = document.getElementById('galleryConfig').dataset.renderCreate;
+  var CSRF = document.querySelector('#csrfHolder [name=csrfmiddlewaretoken]').value;
+
+  // Điền sẵn ngày từ filter khi mở modal
+  document.getElementById('renderModal')?.addEventListener('show.bs.modal', function() {
+    var activeDate = '{{ active_date }}';
+    if (activeDate) {
+      var from = document.getElementById('rmDateFrom');
+      var to   = document.getElementById('rmDateTo');
+      if (from && !from.value) from.value = activeDate + 'T00:00';
+      if (to   && !to.value)   to.value   = activeDate + 'T23:59';
+    }
+  });
+
+  window.submitRenderModal = async function() {
+    var form   = document.getElementById('renderModalForm');
+    var errDiv = document.getElementById('renderModalError');
+    var btn    = document.getElementById('rmSubmitBtn');
+    errDiv.classList.add('d-none');
+
+    var dtFrom = document.getElementById('rmDateFrom').value;
+    var dtTo   = document.getElementById('rmDateTo').value;
+    if (!dtFrom || !dtTo) {
+      errDiv.textContent = 'Vui lòng chọn khoảng ngày giờ.';
+      errDiv.classList.remove('d-none');
+      return;
+    }
+
+    // Extract date part from datetime-local
+    var dateFrom = dtFrom.split('T')[0];
+    var dateTo   = dtTo.split('T')[0];
+    var fps      = form.querySelector('[name=fps]').value;
+    var res      = form.querySelector('[name=resolution]').value;
+
+    var result = await Swal.fire({
+      title: 'Bắt đầu render?',
+      html: `<strong>{{ camera.name }}</strong><br>
+             Từ: <code>${dtFrom.replace('T', ' ')}</code><br>
+             Đến: <code>${dtTo.replace('T', ' ')}</code><br>
+             ${fps} fps · ${res}`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '🚀 Render',
+      cancelButtonText: 'Huỷ',
+      confirmButtonColor: '#0d6efd',
+    });
+    if (!result.isConfirmed) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tạo...';
+
+    try {
+      var fd = new FormData();
+      fd.append('csrfmiddlewaretoken', CSRF);
+      fd.append('date_from', dateFrom);
+      fd.append('date_to', dateTo);
+      fd.append('fps', fps);
+      fd.append('resolution', res);
+
+      var res2 = await fetch(RENDER_URL, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        body: fd,
+      });
+      var json = await res2.json();
+      if (json.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('renderModal'))?.hide();
+        Swal.fire({
+          icon: 'success',
+          title: 'Đã tạo job render!',
+          html: 'Video đang xử lý nền.<br><small>Thanh tiến trình sẽ cập nhật ở trên.</small>',
+          timer: 2500,
+          showConfirmButton: false,
+        }).then(() => location.reload());
+      } else {
+        errDiv.textContent = json.error || 'Lỗi không xác định.';
+        errDiv.classList.remove('d-none');
+      }
+    } catch(e) {
+      errDiv.textContent = 'Lỗi kết nối: ' + e.message;
+      errDiv.classList.remove('d-none');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Bắt đầu render';
+    }
+  };
+
+  // Poll renders đang processing
+  document.querySelectorAll('[id^="vr-row-"]').forEach(function(row) {
+    var id = row.id.replace('vr-row-', '');
+    var statusEl = document.getElementById('vr-status-' + id);
+    if (statusEl) pollRender(id);
+  });
+
+  function pollRender(id) {
+    var iv = setInterval(async function() {
+      try {
+        var r    = await fetch('/renders/' + id + '/status/');
+        var data = await r.json();
+        var prog = document.getElementById('vr-progress-' + id);
+        var stat = document.getElementById('vr-status-' + id);
+        var act  = document.getElementById('vr-action-' + id);
+        if (prog) prog.style.width = data.progress + '%';
+        if (stat) {
+          if (data.status === 'processing') {
+            stat.innerHTML = '<span class="spinner-border" style="width:.5rem;height:.5rem;border-width:2px;"></span> Đang render ' + data.progress + '%';
+          }
+        }
+        if (data.status === 'ready' || data.status === 'failed') {
+          clearInterval(iv);
+          location.reload();
+        }
+      } catch(e) {}
+    }, 5000);
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

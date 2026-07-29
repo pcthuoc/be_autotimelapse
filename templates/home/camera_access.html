@@ -1,0 +1,288 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Camera Access" %} — {{ camera.code }}{% endblock %}
+
+{% block content %}
+
+{# Compact toolbar #}
+<div class="d-flex align-items-center justify-content-between pb-3 gap-2 flex-wrap">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'camera_list' %}" class="btn btn-sm btn-outline-secondary">
+      <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+    </a>
+    <span class="fw-bold">{{ camera.code }}</span>
+    <span class="text-muted small">{{ camera.name }}{% if camera.site %} · {{ camera.site.name }}{% endif %}</span>
+  </div>
+  <button class="btn btn-sm btn-primary d-inline-flex align-items-center"
+          data-bs-toggle="modal" data-bs-target="#modalAddAccess">
+    <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+    {% trans "Grant access" %}
+  </button>
+</div>
+</div>
+
+{# Access table #}
+<div class="card card-body border-0 shadow table-wrapper table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th class="border-gray-200">{% trans "User" %}</th>
+        <th class="border-gray-200 text-center">{% trans "View" %}</th>
+        <th class="border-gray-200 text-center">{% trans "Manage" %}</th>
+        <th class="border-gray-200 text-center">{% trans "Download" %}</th>
+        <th class="border-gray-200 text-center">{% trans "Delete media" %}</th>
+        <th class="border-gray-200 text-muted small">{% trans "Granted by" %}</th>
+        <th class="border-gray-200 text-end">{% trans "Actions" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for acc in accesses %}
+      <tr>
+        <td>
+          <span class="fw-semibold">{{ acc.user.username }}</span>
+          {% if acc.user.email %}<br><small class="text-muted">{{ acc.user.email }}</small>{% endif %}
+        </td>
+        <td class="text-center">{% if acc.can_view %}<span class="text-success">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-center">{% if acc.can_manage %}<span class="text-success">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-center">{% if acc.can_download %}<span class="text-success">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-center">{% if acc.can_delete_media %}<span class="text-danger">✓</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><small class="text-muted">{{ acc.granted_by.username|default:"—" }}<br>{{ acc.granted_at|date:"d/m/Y" }}</small></td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-icon btn-outline-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalEditAccess{{ forloop.counter }}"
+                  title="{% trans 'Edit' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+          </button>
+          <form method="post" action="{% url 'access_remove' acc.pk %}" class="d-inline ms-1">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-icon btn-outline-danger"
+                    title="{% trans 'Revoke' %}"
+                    onclick="return confirm('{% trans "Revoke access for" %} {{ acc.user.username }}?')">
+              <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="7" class="text-center text-muted py-5">
+          {% trans "No users have been granted access to this camera." %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Edit access modals ── #}
+{% for acc in accesses %}
+<div class="modal fade" id="modalEditAccess{{ forloop.counter }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'access_edit' acc.pk %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">{% trans "Edit permissions" %}: <strong>{{ acc.user.username }}</strong></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="list-group list-group-flush">
+            <label class="list-group-item d-flex gap-2 px-0">
+              <input class="form-check-input flex-shrink-0" type="checkbox" name="can_view" {% if acc.can_view %}checked{% endif %}>
+              <span>{% trans "View camera" %}<br><small class="text-muted">{% trans "See camera in list" %}</small></span>
+            </label>
+            <label class="list-group-item d-flex gap-2 px-0">
+              <input class="form-check-input flex-shrink-0" type="checkbox" name="can_manage" {% if acc.can_manage %}checked{% endif %}>
+              <span>{% trans "Manage camera" %}<br><small class="text-muted">{% trans "Edit settings" %}</small></span>
+            </label>
+            <label class="list-group-item d-flex gap-2 px-0">
+              <input class="form-check-input flex-shrink-0" type="checkbox" name="can_download" {% if acc.can_download %}checked{% endif %}>
+              <span>{% trans "Download media" %}<br><small class="text-muted">{% trans "Download photos/videos" %}</small></span>
+            </label>
+            <label class="list-group-item d-flex gap-2 px-0">
+              <input class="form-check-input flex-shrink-0" type="checkbox" name="can_delete_media" {% if acc.can_delete_media %}checked{% endif %}>
+              <span class="text-danger">{% trans "Delete media" %}<br><small class="text-muted">{% trans "Permanently delete files" %}</small></span>
+            </label>
+          </div>
+          {# Hidden user field required by ModelForm #}
+          <input type="hidden" name="user" value="{{ acc.user.pk }}">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          <button type="submit" class="btn btn-primary btn-sm">{% trans "Save changes" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{# ── Modal: Grant access ── #}
+<div class="modal fade" id="modalAddAccess" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{% trans "Grant camera access" %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'access_add' camera.pk %}" id="formGrantAccess">
+      {% csrf_token %}
+      <div class="modal-body">
+
+        {# Chip area: user đã chọn #}
+        <div id="chips_area"
+             class="d-flex flex-wrap gap-1 mb-2 p-2 rounded"
+             style="min-height:36px;border:1px solid #dee2e6;background:#f8f9fa">
+          <span class="text-muted small align-self-center" id="chips_placeholder">No users selected</span>
+        </div>
+
+        {# Search + dropdown #}
+        <div class="position-relative mb-2">
+          <input type="text" id="user_search_input"
+                 class="form-control form-control-sm"
+                 placeholder="Type a name to search users…"
+                 autocomplete="off">
+          <div id="user_dropdown"
+               style="display:none;position:absolute;left:0;right:0;z-index:1055;
+                      max-height:180px;overflow-y:auto;background:#fff;
+                      border:1px solid #dee2e6;border-radius:.375rem;
+                      box-shadow:0 4px 12px rgba(0,0,0,.1)">
+            {% for u in unassigned_users %}
+            <div class="user-option px-3 py-2"
+                 data-pk="{{ u.pk }}"
+                 data-name="{{ u.username }}"
+                 style="cursor:pointer;border-bottom:1px solid #f5f5f5">
+              <span class="fw-semibold small">{{ u.username }}</span>
+              {% if u.email %}<span class="text-muted small ms-2">{{ u.email }}</span>{% endif %}
+            </div>
+            {% empty %}
+            <p class="text-muted text-center small py-3 mb-0">All users already have access.</p>
+            {% endfor %}
+          </div>
+        </div>
+        <div id="hidden_users"></div>
+
+        {# Permissions #}
+        <p class="form-label fw-semibold small mt-3 mb-2">{% trans "Permissions" %}</p>
+        <div class="d-flex flex-column gap-1">
+          <label class="d-flex align-items-center gap-2">{{ add_form.can_view }}<span class="small">{% trans "View camera" %}</span></label>
+          <label class="d-flex align-items-center gap-2">{{ add_form.can_manage }}<span class="small">{% trans "Manage camera" %}</span></label>
+          <label class="d-flex align-items-center gap-2">{{ add_form.can_download }}<span class="small">{% trans "Download media" %}</span></label>
+          <label class="d-flex align-items-center gap-2">{{ add_form.can_delete_media }}<span class="small text-danger">{% trans "Delete media" %}</span></label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+        <button type="submit" class="btn btn-success btn-sm">{% trans "Grant access" %}</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+{% block javascripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var searchInput = document.getElementById("user_search_input");
+  var dropdown    = document.getElementById("user_dropdown");
+  var chipsArea   = document.getElementById("chips_area");
+  var hiddenUsers = document.getElementById("hidden_users");
+  if (!searchInput) return;
+
+  var selected = {};
+
+  // Hiển thị dropdown khi gõ
+  searchInput.addEventListener("input", function () {
+    var q = this.value.trim().toLowerCase();
+    if (!q) { dropdown.style.display = "none"; return; }
+    var opts = dropdown.querySelectorAll(".user-option");
+    var anyVisible = false;
+    opts.forEach(function (opt) {
+      var match = opt.dataset.name.toLowerCase().includes(q);
+      opt.style.display = match ? "" : "none";
+      if (match) anyVisible = true;
+    });
+    dropdown.style.display = anyVisible ? "block" : "none";
+  });
+
+  // Click chọn user
+  dropdown.addEventListener("click", function (e) {
+    var opt = e.target.closest(".user-option");
+    if (!opt) return;
+    var pk   = opt.dataset.pk;
+    var name = opt.dataset.name;
+    if (selected[pk]) return;
+    selected[pk] = name;
+
+    // Chip
+    var chip = document.createElement("span");
+    chip.className = "badge bg-primary d-inline-flex align-items-center gap-1 px-2 py-1";
+    chip.style.cssText = "font-size:.8rem;font-weight:500";
+    chip.dataset.pk = pk;
+    chip.innerHTML = "<span>" + name + "</span><button type=\"button\" data-pk=\"" + pk + "\" style=\"background:none;border:none;color:inherit;padding:0 0 0 4px;font-size:1.1rem;line-height:1;cursor:pointer\">&times;</button>";
+    chipsArea.appendChild(chip);
+
+    // Hidden input
+    var inp = document.createElement("input");
+    inp.type = "checkbox"; inp.name = "users"; inp.value = pk;
+    inp.checked = true; inp.style.display = "none"; inp.id = "hid_" + pk;
+    hiddenUsers.appendChild(inp);
+
+    // Ẩn placeholder, ẩn option đã chọn
+    var ph = document.getElementById("chips_placeholder");
+    if (ph) ph.style.display = "none";
+    opt.style.display = "none";
+
+    searchInput.value = "";
+    dropdown.style.display = "none";
+    searchInput.focus();
+  });
+
+  // Click X bỏ chọn
+  chipsArea.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-pk]");
+    if (!btn) return;
+    var pk = btn.dataset.pk;
+    var chip = chipsArea.querySelector("span.badge[data-pk='" + pk + "']");
+    if (chip) chip.remove();
+    var inp = document.getElementById("hid_" + pk);
+    if (inp) inp.remove();
+    var opt = dropdown.querySelector(".user-option[data-pk='" + pk + "']");
+    if (opt) opt.style.display = "";
+    delete selected[pk];
+    if (!chipsArea.querySelector("span.badge")) {
+      var ph = document.getElementById("chips_placeholder");
+      if (!ph) {
+        ph = document.createElement("span");
+        ph.className = "text-muted small align-self-center";
+        ph.id = "chips_placeholder";
+        ph.textContent = "No users selected";
+        chipsArea.appendChild(ph);
+      } else { ph.style.display = ""; }
+    }
+  });
+
+  // Đóng dropdown khi click ngoài
+  document.addEventListener("click", function (e) {
+    if (!searchInput.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = "none";
+  });
+
+  // Reset khi mở modal
+  var modal = document.getElementById("modalAddAccess");
+  if (modal) {
+    modal.addEventListener("show.bs.modal", function () {
+      searchInput.value = "";
+      dropdown.style.display = "none";
+      dropdown.querySelectorAll(".user-option").forEach(function(o){ o.style.display = ""; });
+      hiddenUsers.innerHTML = "";
+      chipsArea.innerHTML = "<span class=\"text-muted small align-self-center\" id=\"chips_placeholder\">No users selected</span>";
+      selected = {};
+    });
+  }
+});
+</script>
+{% endblock %}

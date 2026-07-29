@@ -1,0 +1,65 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Media — AutoTimelapse{% endblock %}
+
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between pb-3 flex-wrap gap-2">
+  <div>
+    <h2 class="h4 mb-0">{% trans "Media" %}</h2>
+    <p class="text-muted small mb-0">{% trans "Timelapse photos by camera" %}</p>
+  </div>
+  <form method="get" class="d-flex gap-2" style="min-width:220px;max-width:360px;flex:1">
+    <div class="input-group input-group-sm">
+      <span class="input-group-text bg-white">
+        <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path></svg>
+      </span>
+      <input type="text" name="q" value="{{ search }}" class="form-control"
+             placeholder="{% trans 'Search cameras by code or name…' %}">
+      {% if search %}<a href="{% url 'media_home' %}" class="btn btn-outline-secondary">✕</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+{% if rows %}
+<div class="row g-3">
+  {% for row in rows %}
+  <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+    <a href="{% url 'media_gallery' row.camera.pk %}" class="text-decoration-none">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="ratio ratio-16x9 bg-light rounded-top overflow-hidden">
+          {% if row.thumb_url %}
+          <img src="{{ row.thumb_url }}" alt="{{ row.camera.code }}"
+               class="w-100 h-100" style="object-fit:cover" loading="lazy" decoding="async">
+          {% else %}
+          <div class="d-flex align-items-center justify-content-center text-muted">
+            <svg class="icon icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          {% endif %}
+        </div>
+        <div class="card-body py-2">
+          <div class="d-flex align-items-center justify-content-between">
+            <code class="bg-light px-2 py-1 rounded small fw-bold">{{ row.camera.code }}</code>
+            <span class="badge bg-light text-dark rounded-pill">{{ row.camera.get_status_display }}</span>
+          </div>
+          <div class="fw-bold text-dark mt-1 text-truncate">{{ row.camera.name }}</div>
+          {% if row.latest %}
+          <div class="text-muted small">{% trans "Latest" %}: {{ row.latest.taken_at|date:"d/m/Y H:i" }}</div>
+          {% else %}
+          <div class="text-muted small">{% trans "No photos yet" %}</div>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <svg class="icon icon-lg mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+  <p class="mb-0">{% if search %}{% trans "No cameras found." %}{% else %}{% trans "You don't have access to any camera." %}{% endif %}</p>
+</div>
+{% endif %}
+
+{% endblock %}

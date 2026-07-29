@@ -1,0 +1,530 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-24 17:11+0700\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: core/forms.py:17 core/forms.py:39 core/forms.py:172
+#: templates/accounts/login.html:31 templates/accounts/register.html:39
+#: templates/home/users.html:35
+msgid "Username"
+msgstr ""
+
+#: core/forms.py:25 core/forms.py:178 core/forms.py:179
+#: templates/accounts/login.html:44 templates/accounts/register.html:65
+msgid "Password"
+msgstr ""
+
+#: core/forms.py:47 core/forms.py:175 templates/accounts/register.html:52
+#: templates/home/users.html:36
+msgid "Email"
+msgstr ""
+
+#: core/forms.py:54
+msgid "Password (min. 8 characters)"
+msgstr ""
+
+#: core/forms.py:61 core/forms.py:182 core/forms.py:183
+#: templates/accounts/register.html:78
+msgid "Confirm password"
+msgstr ""
+
+#: core/forms.py:68
+msgid "You must accept the terms and conditions."
+msgstr ""
+
+#: core/forms.py:79 core/forms.py:200
+msgid "Username may only contain letters, digits and: @ . + - _"
+msgstr ""
+
+#: core/forms.py:82 core/forms.py:203
+msgid "This username is already taken."
+msgstr ""
+
+#: core/forms.py:88 core/forms.py:209
+msgid "This email is already registered."
+msgstr ""
+
+#: core/forms.py:102
+msgid "Site name"
+msgstr ""
+
+#: core/forms.py:110
+msgid "Description (optional)"
+msgstr ""
+
+#: core/forms.py:124
+msgid "Camera code (e.g. CAM-01)"
+msgstr ""
+
+#: core/forms.py:131
+msgid "Display name"
+msgstr ""
+
+#: core/forms.py:137
+msgid "— Select site —"
+msgstr ""
+
+#: core/forms.py:159
+msgid "This camera code already exists."
+msgstr ""
+
+#: core/forms.py:188 core/forms.py:224
+msgid "— No role —"
+msgstr ""
+
+#: core/forms.py:229 templates/home/users.html:134
+msgid "Active account"
+msgstr ""
+
+#: core/forms.py:262 templates/includes/sidebar.html:65
+msgid "Users"
+msgstr ""
+
+#: core/forms.py:270 templates/home/camera_access.html:94
+#: templates/home/camera_access.html:170
+msgid "View camera"
+msgstr ""
+
+#: core/forms.py:275 templates/home/camera_access.html:98
+#: templates/home/camera_access.html:171
+msgid "Manage camera"
+msgstr ""
+
+#: core/forms.py:280 templates/home/camera_access.html:102
+#: templates/home/camera_access.html:172
+msgid "Download media"
+msgstr ""
+
+#: core/forms.py:285 templates/home/_camera_access_body.html:76
+#: templates/home/_camera_access_body.html:108
+#: templates/home/_camera_access_body.html:119
+#: templates/home/camera_access.html:34 templates/home/camera_access.html:106
+#: templates/home/camera_access.html:173
+msgid "Delete media"
+msgstr ""
+
+#: core/forms.py:302
+msgid "You must grant at least one permission."
+msgstr ""
+
+#: core/views/auth.py:39
+msgid "Invalid username or password."
+msgstr ""
+
+#: core/views/auth.py:41
+msgid "Please check your login details."
+msgstr ""
+
+#: core/views/auth.py:56
+msgid "Account created! You can now log in."
+msgstr ""
+
+#: core/views/auth.py:59
+msgid "Please check your registration details."
+msgstr ""
+
+#: templates/accounts/login.html:4 templates/accounts/login.html:68
+#: templates/accounts/register.html:118
+msgid "Sign In"
+msgstr ""
+
+#: templates/accounts/login.html:19
+msgid "Sign in to your account"
+msgstr ""
+
+#: templates/accounts/login.html:61
+msgid "Remember me"
+msgstr ""
+
+#: templates/accounts/login.html:64
+msgid "Forgot password?"
+msgstr ""
+
+#: templates/accounts/login.html:74
+msgid "No account?"
+msgstr ""
+
+#: templates/accounts/login.html:75
+msgid "Create one"
+msgstr ""
+
+#: templates/accounts/register.html:4 templates/accounts/register.html:110
+msgid "Create Account"
+msgstr ""
+
+#: templates/accounts/register.html:23
+msgid "Sign in now"
+msgstr ""
+
+#: templates/accounts/register.html:30
+msgid "Create a new account"
+msgstr ""
+
+#: templates/accounts/register.html:99
+msgid "I agree to the"
+msgstr ""
+
+#: templates/accounts/register.html:99
+msgid "terms and conditions"
+msgstr ""
+
+#: templates/accounts/register.html:117
+msgid "Already have an account?"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:6 templates/home/cameras.html:86
+msgid "Manage access"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:21
+msgid "user(s) with access"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:26
+#: templates/home/_camera_access_body.html:81
+#: templates/home/camera_access.html:20 templates/home/camera_access.html:178
+msgid "Grant access"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:40
+msgid "No users selected yet"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:47
+msgid "Type a name to search…"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:63
+msgid "Everyone already has access."
+msgstr ""
+
+#: templates/home/_camera_access_body.html:72
+#: templates/home/camera_access.html:168
+msgid "Permissions"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:73
+#: templates/home/_camera_access_body.html:105
+#: templates/home/_camera_access_body.html:116
+#: templates/home/camera_access.html:31
+msgid "View"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:74
+#: templates/home/_camera_access_body.html:106
+#: templates/home/_camera_access_body.html:117
+#: templates/home/camera_access.html:32
+msgid "Manage"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:75
+#: templates/home/_camera_access_body.html:107
+#: templates/home/_camera_access_body.html:118
+#: templates/home/_media_items.html:15 templates/home/camera_access.html:33
+msgid "Download"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:80
+#: templates/home/_camera_access_body.html:123
+#: templates/home/camera_access.html:113 templates/home/camera_access.html:177
+#: templates/home/cameras.html:134 templates/home/cameras.html:157
+#: templates/home/cameras.html:188 templates/home/cameras.html:214
+#: templates/home/users.html:138 templates/home/users.html:170
+msgid "Cancel"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:109
+msgid "No permissions"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:124
+#: templates/home/camera_access.html:114 templates/home/cameras.html:135
+#: templates/home/users.html:139
+msgid "Save changes"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:132
+#: templates/home/camera_access.html:55 templates/home/cameras.html:78
+#: templates/home/cameras.html:121 templates/home/users.html:79
+msgid "Edit"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:137
+#: templates/home/camera_access.html:61
+msgid "Revoke"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:146
+#: templates/home/camera_access.html:71
+msgid "No users have been granted access to this camera."
+msgstr ""
+
+#: templates/home/_camera_access_body.html:156
+msgid "user(s) have access to this camera"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:158
+msgid "No one has access yet — grant access above"
+msgstr ""
+
+#: templates/home/_camera_access_body.html:161
+msgid "Close"
+msgstr ""
+
+#: templates/home/_media_page.html:17
+msgid "Chọn"
+msgstr ""
+
+#: templates/home/_media_page.html:30
+msgid "No photos."
+msgstr ""
+
+#: templates/home/_media_page.html:55
+msgid "Page"
+msgstr ""
+
+#: templates/home/_media_page.html:55 templates/home/media_gallery.html:20
+msgid "photos"
+msgstr ""
+
+#: templates/home/camera_access.html:4
+msgid "Camera Access"
+msgstr ""
+
+#: templates/home/camera_access.html:30
+msgid "User"
+msgstr ""
+
+#: templates/home/camera_access.html:35
+msgid "Granted by"
+msgstr ""
+
+#: templates/home/camera_access.html:36 templates/home/users.html:39
+msgid "Actions"
+msgstr ""
+
+#: templates/home/camera_access.html:62
+msgid "Revoke access for"
+msgstr ""
+
+#: templates/home/camera_access.html:87
+msgid "Edit permissions"
+msgstr ""
+
+#: templates/home/camera_access.html:94
+msgid "See camera in list"
+msgstr ""
+
+#: templates/home/camera_access.html:98
+msgid "Edit settings"
+msgstr ""
+
+#: templates/home/camera_access.html:102
+msgid "Download photos/videos"
+msgstr ""
+
+#: templates/home/camera_access.html:106
+msgid "Permanently delete files"
+msgstr ""
+
+#: templates/home/camera_access.html:127
+msgid "Grant camera access"
+msgstr ""
+
+#: templates/home/cameras.html:17
+msgid "Search cameras…"
+msgstr ""
+
+#: templates/home/cameras.html:26 templates/home/cameras.html:201
+msgid "Add Site"
+msgstr ""
+
+#: templates/home/cameras.html:30 templates/home/cameras.html:108
+#: templates/home/cameras.html:189
+msgid "Add Camera"
+msgstr ""
+
+#: templates/home/cameras.html:48 templates/home/users.html:70
+msgid "Active"
+msgstr ""
+
+#: templates/home/cameras.html:52
+msgid "Maintenance"
+msgstr ""
+
+#: templates/home/cameras.html:56
+msgid "Inactive"
+msgstr ""
+
+#: templates/home/cameras.html:93
+msgid "Delete"
+msgstr ""
+
+#: templates/home/cameras.html:107
+msgid "No cameras yet."
+msgstr ""
+
+#: templates/home/cameras.html:149
+msgid "Confirm delete"
+msgstr ""
+
+#: templates/home/cameras.html:153 templates/home/cameras.html:158
+msgid "Delete camera"
+msgstr ""
+
+#: templates/home/cameras.html:154
+msgid "This action cannot be undone."
+msgstr ""
+
+#: templates/home/cameras.html:175
+msgid "Add new Camera"
+msgstr ""
+
+#: templates/home/cameras.html:215
+msgid "Create Site"
+msgstr ""
+
+#: templates/home/cameras.html:234
+msgid "Loading…"
+msgstr ""
+
+#: templates/home/media_gallery.html:25
+msgid "Download bundle"
+msgstr ""
+
+#: templates/home/media_gallery.html:34
+msgid "Date"
+msgstr ""
+
+#: templates/home/media_gallery.html:36
+msgid "All"
+msgstr ""
+
+#: templates/home/media_gallery.html:42
+msgid "— Quick select date —"
+msgstr ""
+
+#: templates/home/media_gallery.html:56
+msgid "Select all"
+msgstr ""
+
+#: templates/home/media_gallery.html:57
+msgid "Deselect"
+msgstr ""
+
+#: templates/home/media_gallery.html:60
+msgid "Download selected"
+msgstr ""
+
+#: templates/home/media_gallery.html:64
+msgid "Download all today"
+msgstr ""
+
+#: templates/home/media_gallery.html:71
+msgid "Range"
+msgstr ""
+
+#: templates/home/media_gallery.html:75
+msgid "Download range"
+msgstr ""
+
+#: templates/home/media_gallery.html:104
+msgid "Download photo"
+msgstr ""
+
+#: templates/home/media_gallery.html:125
+msgid "Your download bundles"
+msgstr ""
+
+#: templates/home/media_gallery.html:129
+msgid ""
+"Archive is created in the background. When status is Ready, click to "
+"download. Link expires after some time."
+msgstr ""
+
+#: templates/home/media_home.html:10
+msgid "Media"
+msgstr ""
+
+#: templates/home/media_home.html:11
+msgid "Timelapse photos by camera"
+msgstr ""
+
+#: templates/home/media_home.html:19
+msgid "Search cameras by code or name…"
+msgstr ""
+
+#: templates/home/media_home.html:48
+msgid "Latest"
+msgstr ""
+
+#: templates/home/media_home.html:50
+msgid "No photos yet"
+msgstr ""
+
+#: templates/home/media_home.html:61
+msgid "No cameras found."
+msgstr ""
+
+#: templates/home/media_home.html:61
+msgid "You don't have access to any camera."
+msgstr ""
+
+#: templates/home/users.html:4
+msgid "User Management"
+msgstr ""
+
+#: templates/home/users.html:18
+msgid "Search by username or email…"
+msgstr ""
+
+#: templates/home/users.html:25 templates/home/users.html:171
+msgid "Add User"
+msgstr ""
+
+#: templates/home/users.html:37 templates/home/users.html:127
+msgid "Role"
+msgstr ""
+
+#: templates/home/users.html:38
+msgid "Status"
+msgstr ""
+
+#: templates/home/users.html:72
+msgid "Disabled"
+msgstr ""
+
+#: templates/home/users.html:101
+msgid "No users found."
+msgstr ""
+
+#: templates/home/users.html:120
+msgid "Edit user"
+msgstr ""
+
+#: templates/home/users.html:156
+msgid "Add new user"
+msgstr ""
+
+#: templates/includes/pagination.html:5
+#, python-format
+msgid ""
+"\n"
+"      Showing %(start)s–%(end)s of %(total)s\n"
+"    "
+msgstr ""

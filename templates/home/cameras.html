@@ -1,0 +1,634 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Camera — AutoTimelapse{% endblock %}
+{% block stylesheets %}
+<style>
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .5; transform: scale(1.5); }
+}
+.cam-thumb {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: block;
+  text-decoration: none;
+  position: relative;
+}
+.cam-thumb img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+.cam-thumb:hover img { transform:scale(1.04); }
+.cam-thumb .thumb-placeholder {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  color:#555;
+}
+.cam-thumb .thumb-placeholder svg { width:2.8rem; height:2.8rem; opacity:.25; }
+.cam-status-badge {
+  position:absolute; top:.5rem; left:.5rem;
+  backdrop-filter:blur(6px);
+  font-size:.7rem;
+}
+.cam-live-badge {
+  position:absolute; bottom:.5rem; right:.5rem;
+  font-size:.65rem; background:rgba(0,0,0,.6); backdrop-filter:blur(4px);
+}
+
+/* ── Card telemetry icon strip ── */
+.cam-tele {
+  display:flex; gap:.75rem; align-items:center;
+  font-size:.72rem; color:#6c757d;
+}
+.cam-tele .t { display:inline-flex; align-items:center; gap:.2rem; }
+.cam-tele svg { width:.95rem; height:.95rem; }
+.cam-tele .warn { color:#dc3545; }
+.cam-tele .ok   { color:#198754; }
+/* signal bars */
+.sig { display:inline-flex; align-items:flex-end; gap:1px; height:.85rem; }
+.sig-bar { width:3px; background:var(--bg-tertiary); border-radius:1px; }
+.sig-bar.on { background:var(--accent); }
+
+/* ── Card telemetry grid ── */
+.cam-tele-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .35rem;
+  text-align: center;
+}
+.cam-tele-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .15rem;
+  padding: .4rem .15rem;
+  border-radius: .375rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: .65rem;
+  min-height: 4.2rem;
+}
+.cam-tele-cell.warn { background: rgba(239,68,68,.08); color: var(--status-error); border-color: rgba(239,68,68,.25); }
+.cam-tele-cell svg { width: 1.1rem; height: 1.1rem; }
+.cam-tele-val { font-weight: 700; font-size: .78rem; color: var(--text-primary); line-height: 1.1; }
+.cam-tele-cell.warn .cam-tele-val { color: var(--status-error); }
+.cam-tele-lbl { font-size: .6rem; text-transform: uppercase; letter-spacing: .02em; }
+
+/* ── Card footer action grid ── */
+.cam-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: .4rem;
+}
+.cam-action-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .15rem;
+  padding: .4rem .15rem;
+  font-size: .65rem;
+  line-height: 1.1;
+  border-radius: .375rem;
+}
+.cam-action-btn svg { width: 1rem; height: 1rem; }
+
+/* ── Device modal tiles ── */
+.dev-photo-wrap { background:var(--bg-primary); aspect-ratio:640/424; }
+.dev-photo-wrap img { width:100%; height:100%; object-fit:contain; display:block; }
+.dev-photo-empty {
+  height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#666;
+}
+.dev-photo-empty svg { width:2.6rem; height:2.6rem; opacity:.35; }
+.dev-photo-overlay { background:linear-gradient(transparent, rgba(0,0,0,.65)); }
+.dev-tile {
+  border:1px solid var(--border-color); border-radius:.5rem; padding:.5rem .6rem; height:100%;
+  background:var(--bg-card);
+}
+.dev-tile-top { display:flex; align-items:center; gap:.35rem; color:var(--text-secondary); }
+.dev-tile-label { font-size:.68rem; text-transform:uppercase; font-weight:600; letter-spacing:.02em; }
+.dev-tile-val { font-size:1.05rem; font-weight:700; line-height:1.1; margin-top:.15rem; color:var(--text-primary); }
+.dev-tile-sub { font-size:.7rem; color:var(--text-muted); }
+.dev-ic { width:1rem; height:1rem; }
+.dev-cell { background:var(--bg-tertiary); color:var(--text-secondary); font-weight:600; font-size:.7rem; }
+/* signal bars inside tile */
+.dev-sig { display:inline-flex; align-items:flex-end; gap:2px; height:1rem; }
+.dev-sig-bar { width:4px; background:var(--bg-tertiary); border-radius:1px; }
+.dev-sig-bar.on { background:var(--accent); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filter bar ──────────────────────────────────────────────────────────────── #}
+<div class="card mb-3 border-0 shadow-sm">
+  <div class="card-body py-2 px-3">
+    <form method="get" id="filterForm" class="row g-2 align-items-end">
+
+      {# Tìm kiếm #}
+      <div class="col-12 col-sm-6 col-md-3">
+        <label class="form-label form-label-sm mb-1 fw-semibold">🔍 Tìm kiếm</label>
+        <div class="input-group input-group-sm">
+          <input type="text" name="q" value="{{ search }}" class="form-control"
+                 placeholder="Tên, mã camera…" autocomplete="off">
+          {% if search %}<a href="{% url 'camera_list' %}" class="btn btn-outline-secondary">✕</a>{% endif %}
+        </div>
+      </div>
+
+      {# Client / Project #}
+      {% if all_clients %}
+      <div class="col-12 col-sm-6 col-md-3">
+        <label class="form-label form-label-sm mb-1 fw-semibold">🏢 Client / Dự án</label>
+        <select name="site" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">-- Tất cả --</option>
+          <option value="none" {% if f_site == "none" %}selected{% endif %}>📁 Chưa gán dự án</option>
+          {% for client in all_clients %}
+          <optgroup label="{{ client.name }}">
+            {% for proj in client.projects.all %}
+            <option value="{{ proj.pk }}" {% if f_site == proj.pk|stringformat:"s" %}selected{% endif %}>
+              📁 {{ proj.name }}
+            </option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      {# Nếu chưa có client — chọn thẳng site #}
+      <div class="col-12 col-sm-6 col-md-3">
+        <label class="form-label form-label-sm mb-1 fw-semibold">📁 Công trường</label>
+        <select name="site" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">-- Tất cả --</option>
+          <option value="none" {% if f_site == "none" %}selected{% endif %}>Chưa gán</option>
+          {% for s in sites %}
+          <option value="{{ s.pk }}" {% if f_site == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      {# Trạng thái #}
+      <div class="col-6 col-sm-4 col-md-2">
+        <label class="form-label form-label-sm mb-1 fw-semibold">⚙️ Trạng thái</label>
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">-- Tất cả --</option>
+          <option value="active"      {% if f_status == "active" %}selected{% endif %}>✅ Active</option>
+          <option value="inactive"    {% if f_status == "inactive" %}selected{% endif %}>⏸️ Inactive</option>
+          <option value="maintenance" {% if f_status == "maintenance" %}selected{% endif %}>🔧 Maintenance</option>
+        </select>
+      </div>
+
+      {# Online only #}
+      <div class="col-6 col-sm-4 col-md-2">
+        <label class="form-label form-label-sm mb-1 fw-semibold">📡 Kết nối</label>
+        <select name="online" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">-- Tất cả --</option>
+          <option value="1" {% if f_online == "1" %}selected{% endif %}>🟢 Online</option>
+        </select>
+      </div>
+
+      {# Nút tìm + reset #}
+      <div class="col-12 col-sm-4 col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary flex-grow-1">Lọc</button>
+        {% if search or f_site or f_status or f_online %}
+        <a href="{% url 'camera_list' %}" class="btn btn-sm btn-outline-secondary">Reset</a>
+        {% endif %}
+      </div>
+
+    </form>
+  </div>
+  {# Kết quả đang lọc #}
+  {% if search or f_site or f_status or f_online %}
+  <div class="card-footer py-1 px-3 bg-transparent border-top d-flex align-items-center justify-content-between">
+    <small class="text-muted">
+      Tìm thấy <strong>{{ total_count }}</strong> camera
+      {% if search %} · tìm "<em>{{ search }}</em>"{% endif %}
+      {% if f_site == "none" %}· chưa gán dự án{% elif f_site %} · {{ sites|dictsort:"pk"|join:"," }}{% endif %}
+      {% if f_status %} · {{ f_status }}{% endif %}
+      {% if f_online == "1" %} · online{% endif %}
+    </small>
+    <a href="{% url 'camera_list' %}" class="text-muted small">✕ Xoá bộ lọc</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Toolbar (Add buttons) ───────────────────────────────────────────────────── #}
+{% if can_add %}
+<div class="d-flex justify-content-end gap-2 mb-3">
+  <button class="btn btn-sm btn-outline-secondary"
+          data-bs-toggle="modal" data-bs-target="#modalAddSite">
+    <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+    {% trans "Add Site" %}
+  </button>
+  <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddCamera">
+    <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+    {% trans "Add Camera" %}
+  </button>
+</div>
+{% endif %}
+
+{# ── Camera cards ─────────────────────────────────────────────────────────────── #}
+{% if rows %}
+<div class="row g-3">
+  {% for cam, can_edit, edit_form, thumb_url in rows %}
+  <div class="col-12 col-sm-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 overflow-hidden">
+
+      {# ── Thumbnail → click mở modal quản lý thiết bị ── #}
+      <a class="cam-thumb js-device-open" href="#"
+         data-device-url="{% url 'camera_device_modal' cam.pk %}">
+        {% if thumb_url %}
+          <img src="{{ thumb_url }}" alt="{{ cam.name }}" loading="lazy">
+        {% else %}
+          <div class="thumb-placeholder">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                    d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <span class="mt-1 small">{% trans "No photos yet" %}</span>
+          </div>
+        {% endif %}
+
+        {# Status badge – top left #}
+        {% if cam.status == "active" %}
+          <span class="badge cam-status-badge" style="background:rgba(25,135,84,.8)">
+            <span class="rounded-circle bg-success me-1"
+                  style="width:6px;height:6px;display:inline-block;animation:pulse-dot 1.5s infinite"></span>
+            {% trans "Active" %}
+          </span>
+        {% elif cam.status == "maintenance" %}
+          <span class="badge bg-warning text-dark cam-status-badge">{% trans "Maintenance" %}</span>
+        {% else %}
+          <span class="badge bg-secondary cam-status-badge">{% trans "Inactive" %}</span>
+        {% endif %}
+
+        {# Live hint – bottom right #}
+        <span class="badge text-white cam-live-badge">▶ LIVE</span>
+      </a>
+
+      {# ── Card body ── #}
+      <div class="card-body py-2 px-3">
+        <h6 class="fw-bold mb-0 lh-sm text-truncate" title="{{ cam.name }}">{{ cam.name }}</h6>
+        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+          <code class="text-muted" style="font-size:.72rem">{{ cam.code }}</code>
+          {% if cam.camera_model and cam.camera_model != "generic" %}<span class="badge bg-light text-secondary border" style="font-size:.65rem">{{ cam.get_camera_model_display }}</span>{% endif %}
+        </div>
+
+        {# ── Telemetry grid ── #}
+        {% with dev=cam.device_obj %}
+        {% if dev %}
+        <div class="cam-tele-grid mt-2">
+          {# SIM signal #}
+          <div class="cam-tele-cell" title="SIM {{ dev.signal_label }}{% if dev.sim_signal_dbm != None %} ({{ dev.sim_signal_dbm }} dBm){% endif %}">
+            <span class="sig">
+              {% with bars=dev.signal_bars %}
+              {% for i in "1234" %}
+                <span class="sig-bar {% if bars and forloop.counter <= bars %}on{% endif %}"
+                      style="height:{{ forloop.counter }}0%"></span>
+              {% endfor %}
+              {% endwith %}
+            </span>
+            <span class="cam-tele-val">{{ dev.signal_label|default:"—" }}</span>
+            <span class="cam-tele-lbl">{% trans "Signal" %}</span>
+          </div>
+          {# Battery #}
+          <div class="cam-tele-cell {% if dev.battery_percent != None and dev.battery_percent <= 20 %}warn{% endif %}"
+               title="{% trans 'Battery' %}{% if dev.battery_voltage != None %} {{ dev.battery_voltage }}V{% endif %}">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="7" width="16" height="10" rx="2" stroke-width="2"/><path d="M20 10v4" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="cam-tele-val">{% if dev.battery_percent != None %}{{ dev.battery_percent }}%{% if dev.is_charging %} ⚡{% endif %}{% else %}—{% endif %}</span>
+            <span class="cam-tele-lbl">{% trans "Battery" %}</span>
+          </div>
+          {# Solar #}
+          <div class="cam-tele-cell" title="Solar{% if dev.solar_voltage != None %} {{ dev.solar_voltage }}V{% endif %}">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M6 6l1 1M17 17l1 1M18 6l-1 1M7 17l-1 1" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="cam-tele-val">{% if dev.solar_percent != None %}{{ dev.solar_percent }}%{% elif dev.solar_voltage != None %}{{ dev.solar_voltage }}V{% else %}—{% endif %}</span>
+            <span class="cam-tele-lbl">{% trans "Solar" %}</span>
+          </div>
+          {# Cells #}
+          <div class="cam-tele-cell" title="{% trans 'Battery cells' %}">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="9" width="4" height="6" rx="1" stroke-width="2"/><rect x="10" y="9" width="4" height="6" rx="1" stroke-width="2"/><rect x="17" y="9" width="4" height="6" rx="1" stroke-width="2"/></svg>
+            <span class="cam-tele-val">{% if dev.cell_count %}{{ dev.cell_count }}{% else %}—{% endif %}</span>
+            <span class="cam-tele-lbl">{% trans "Cells" %}</span>
+          </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="d-flex flex-wrap gap-2 mt-2 small text-muted">
+          <span>
+            <svg class="icon icon-xxs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+            </svg>{{ cam.site.name|default:"—" }}
+          </span>
+          <span>
+            <svg class="icon icon-xxs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>{{ cam.timezone }}
+          </span>
+        </div>
+      </div>
+
+      {# ── Footer actions ── #}
+      <div class="card-footer bg-transparent border-top-0 pt-0 pb-3 px-3">
+        <div class="cam-actions">
+          {# Chi tiết camera #}
+          <a href="{% url 'camera_detail' cam.pk %}"
+             class="cam-action-btn btn btn-outline-secondary"
+             title="Chi tiết camera">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>Chi tiết</span>
+          </a>
+          {% if can_edit %}
+          {# Remote activate / capture now #}
+          <button type="button"
+                  class="cam-action-btn btn btn-primary js-card-wake"
+                  data-wake-url="{% url 'camera_device_wake' cam.pk %}"
+                  title="{% trans 'Activate remotely — capture a photo now' %}">
+            <span class="js-wake-spin spinner-border spinner-border-sm" style="display:none;width:.7rem;height:.7rem;border-width:.12em"></span>
+            <svg class="icon icon-xxs js-wake-ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <span>{% trans "Activate" %}</span>
+          </button>
+          {% endif %}
+          {% if user_perms.media_view %}
+          {# Browse timelapse photos #}
+          <a href="{% url 'media_gallery' cam.pk %}"
+             class="cam-action-btn btn btn-outline-primary"
+             title="{% trans 'Browse timelapse photos' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <span>{% trans "Photos" %}</span>
+          </a>
+          {% endif %}
+          {% if can_edit %}
+          <button class="cam-action-btn btn btn-outline-primary"
+                  data-bs-toggle="modal" data-bs-target="#modalEdit{{ forloop.counter }}"
+                  title="{% trans 'Edit' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            <span>{% trans "Edit" %}</span>
+          </button>
+          {% endif %}
+          {% if can_assign %}
+          <button type="button"
+                  class="cam-action-btn btn btn-outline-info js-access-open"
+                  data-access-url="{% url 'camera_access_partial' cam.pk %}"
+                  title="{% trans 'Manage access' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            <span>{% trans "Access" %}</span>
+          </button>
+          {% endif %}
+          {% if can_delete %}
+          <button class="cam-action-btn btn btn-outline-danger"
+                  data-bs-toggle="modal" data-bs-target="#modalDel{{ forloop.counter }}"
+                  title="{% trans 'Delete' %}">
+            <svg class="icon icon-xxs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            <span>{% trans "Delete" %}</span>
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% include "includes/pagination.html" %}
+
+{% else %}
+<div class="text-center text-muted py-5">
+  <svg class="icon mb-3" style="width:3rem;height:3rem" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+  <p class="mb-1 fw-semibold">{% trans "No cameras yet." %}</p>
+  {% if can_add %}<a href="#" data-bs-toggle="modal" data-bs-target="#modalAddCamera" class="btn btn-sm btn-primary mt-2">{% trans "Add Camera" %}</a>{% endif %}
+</div>
+{% endif %}
+
+{# ── Edit + Delete modals ─────────────────────────────────────────────────────── #}
+{% for cam, can_edit, edit_form, thumb_url in rows %}
+{% if can_edit and edit_form %}
+<div class="modal fade" id="modalEdit{{ forloop.counter }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'camera_edit' cam.pk %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">{% trans "Edit" %} <code>{{ cam.code }}</code></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {# Token box #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">🔑 Token (username)</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control font-monospace"
+                     value="{{ cam.code }}" readonly id="editToken{{ forloop.counter }}">
+              <button class="btn btn-outline-secondary js-copy" type="button"
+                      data-copy-target="#editToken{{ forloop.counter }}" title="Copy">⎘</button>
+            </div>
+            <div class="input-group input-group-sm mt-1">
+              <span class="input-group-text" style="font-size:.7rem">MQTT pass</span>
+              <input type="text" class="form-control font-monospace"
+                     value="{{ cam.mqtt_password }}" readonly id="editMqttPass{{ forloop.counter }}">
+              <button class="btn btn-outline-secondary js-copy" type="button"
+                      data-copy-target="#editMqttPass{{ forloop.counter }}" title="Copy">⎘</button>
+            </div>
+            <div class="form-text">Credential MQTT/HTTP của thiết bị.</div>
+          </div>
+          {# code ẩn — giữ nguyên giá trị hiện tại #}
+          <input type="hidden" name="code" value="{{ cam.code }}">
+          {% for field in edit_form %}
+          {% if field.html_name != "code" %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors.as_text }}</div>{% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          <button type="submit" class="btn btn-primary btn-sm">{% trans "Save changes" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% if can_delete %}
+<div class="modal fade" id="modalDel{{ forloop.counter }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'camera_delete' cam.pk %}">
+        {% csrf_token %}
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title text-danger">{% trans "Confirm delete" %}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-center py-3">
+          <p class="mb-1">{% trans "Delete camera" %} <strong>{{ cam.code }}</strong>?</p>
+          <small class="text-danger">{% trans "This action cannot be undone." %}</small>
+        </div>
+        <div class="modal-footer border-0 justify-content-center">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          <button type="submit" class="btn btn-danger btn-sm">{% trans "Delete camera" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{# ── Modal: Add Camera ──────────────────────────────────────────────────────────── #}
+{% if can_add %}
+<div class="modal fade" id="modalAddCamera" tabindex="-1" aria-hidden="true"{% if open_add_modal %} data-auto-open="1"{% endif %}>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'camera_add' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">{% trans "Add new Camera" %}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {# code ẩn — tự sinh trong Camera.save() #}
+          <input type="hidden" name="code" value="">
+          {% for field in add_form %}
+          {% if field.html_name != "code" %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors.as_text }}</div>{% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          <button type="submit" class="btn btn-primary btn-sm">{% trans "Add Camera" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="modalAddSite" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'site_add' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">{% trans "Add Site" %}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {% for field in site_form %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors.as_text }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          <button type="submit" class="btn btn-success btn-sm">{% trans "Create Site" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+
+
+{# ── Shared modal: quản lý phân quyền camera (AJAX) ── #}
+<div class="modal fade" id="modalCameraAccess" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content" id="cameraAccessContent">
+      <div class="modal-body text-center py-5 text-muted">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 mb-0">{% trans "Loading…" %}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Shared modal: quản lý thiết bị / live (AJAX) ── #}
+<div class="modal fade" id="modalCameraDevice" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"
+       style="max-width:min(1560px,96vw)">
+    <div class="modal-content" id="cameraDeviceContent">
+      <div class="modal-body text-center py-5 text-muted">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 mb-0">{% trans "Loading…" %}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+{% block javascripts %}
+<script id="camerasI18n" type="application/json">{
+  "loading": "{% filter escapejs %}{% trans 'Loading…' %}{% endfilter %}",
+  "networkError": "{% filter escapejs %}{% trans 'Network error' %}{% endfilter %}",
+  "revokeConfirm": "{% filter escapejs %}{% trans 'Revoke access for' %}{% endfilter %}",
+  "inSync": "{% filter escapejs %}{% trans 'In sync' %}{% endfilter %}",
+  "notSynced": "{% filter escapejs %}{% trans 'Not synced' %}{% endfilter %}",
+  "captureRequested": "{% filter escapejs %}{% trans 'Capture requested. Device will respond on next check-in.' %}{% endfilter %}",
+  "simUpdatedFromDevice": "{% filter escapejs %}{% trans 'SIM info updated from device.' %}{% endfilter %}",
+  "simNoResponse": "{% filter escapejs %}{% trans 'No SIM response yet — device will report on next check-in.' %}{% endfilter %}",
+  "simUpdated": "{% filter escapejs %}{% trans 'SIM info updated.' %}{% endfilter %}",
+  "statusUpdated": "{% filter escapejs %}{% trans 'Status updated.' %}{% endfilter %}",
+  "settingsSaved": "{% filter escapejs %}{% trans 'Settings saved.' %}{% endfilter %}",
+  "savedSending": "{% filter escapejs %}{% trans 'Saved. Sending to camera…' %}{% endfilter %}",
+  "cameraApplied": "{% filter escapejs %}{% trans 'Camera applied the settings.' %}{% endfilter %}",
+  "noResponseWillSync": "{% filter escapejs %}{% trans 'No response from camera yet — will sync on next check-in.' %}{% endfilter %}",
+  "camSettingsSaved": "{% filter escapejs %}{% trans 'Camera settings saved.' %}{% endfilter %}",
+  "requestedWaiting": "{% filter escapejs %}{% trans 'Requested — waiting for camera…' %}{% endfilter %}",
+  "configLoaded": "{% filter escapejs %}{% trans 'Configuration loaded from camera.' %}{% endfilter %}",
+  "noResponseLastKnown": "{% filter escapejs %}{% trans 'No response from camera — showing last known values.' %}{% endfilter %}",
+  "mqttUnavailable": "{% filter escapejs %}{% trans 'MQTT unavailable — showing last known values.' %}{% endfilter %}",
+  "activationSent": "{% filter escapejs %}{% trans 'Activation sent — device will capture on next check-in.' %}{% endfilter %}"
+}</script>
+<script src="/static/assets/js/cameras.js?v=7bad4726"></script>
+
+{# ── Modal: one-time credential (hiện 1 lần sau khi thêm camera) ─────────── #}
+{% if new_cam_token %}
+<div class="modal fade" id="modalNewCredential" tabindex="-1" data-bs-backdrop="static" aria-hidden="true" data-auto-open="1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">🔑 {% trans "Device token — save it now" %}</h5>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2 small text-muted">
+          Camera <strong>{{ new_cam_code }}</strong> vừa được tạo.
+          Thiết bị dùng cặp credential dưới đây để kết nối MQTT/HTTP
+          (username = camera code). Bạn có thể xem lại trong nút Edit của camera.
+        </p>
+        <label class="form-label small fw-semibold mb-1">Camera code (username)</label>
+        <div class="input-group mb-2">
+          <input type="text" id="newCamToken" class="form-control font-monospace"
+                 value="{{ new_cam_token }}" readonly>
+          <button class="btn btn-outline-secondary js-copy" type="button" data-copy-target="#newCamToken" title="Copy">⎘</button>
+        </div>
+        {% if new_cam_mqtt_pass %}
+        <label class="form-label small fw-semibold mb-1">MQTT password</label>
+        <div class="input-group">
+          <input type="text" id="newCamMqttPass" class="form-control font-monospace"
+                 value="{{ new_cam_mqtt_pass }}" readonly>
+          <button class="btn btn-outline-secondary js-copy" type="button" data-copy-target="#newCamMqttPass" title="Copy">⎘</button>
+        </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">
+          {% trans "Got it — close" %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

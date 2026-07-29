@@ -1,0 +1,22 @@
+{% load i18n %}
+{% for p in photos %}
+<div class="col-6 col-sm-4 col-md-3 col-lg-2 media-cell">
+  <div class="card border-0 shadow-sm h-100">
+    <a href="{% url 'media_serve' p.obj.pk %}" target="_blank" rel="noopener"
+       class="ratio ratio-1x1 bg-light rounded-top overflow-hidden d-block">
+      <img src="{{ p.thumb_url }}" alt="{{ p.obj.taken_at }}"
+           class="w-100 h-100" style="object-fit:cover" loading="lazy" decoding="async">
+    </a>
+    <div class="card-body p-2">
+      <div class="text-muted small text-truncate">{{ p.obj.taken_at|date:"d/m H:i:s" }}</div>
+      {% if can_download %}
+      <a href="{% url 'media_download' p.obj.pk %}" class="btn btn-sm btn-outline-primary w-100 mt-1 py-0">
+        <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        {% trans "Download" %}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+<div id="nextCursor" data-next="{{ next_before }}" hidden></div>

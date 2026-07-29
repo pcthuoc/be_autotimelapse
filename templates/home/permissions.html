@@ -1,0 +1,109 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Phân quyền — AutoTimelapse{% endblock %}
+
+{% block stylesheets %}
+<style>
+.perm-check { width:1rem; height:1rem; cursor:default; }
+.perm-yes { color:#198754; font-size:1rem; }
+.perm-no  { color:#dee2e6; font-size:1rem; }
+.role-name { font-weight:700; font-size:.95rem; }
+.perm-group-header { font-size:.72rem; font-weight:700; text-transform:uppercase;
+                     letter-spacing:.08em; color:#6c757d; padding:.5rem .75rem;
+                     background:#f8f9fa; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1">
+
+  {# Tabs #}
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link active" href="{% url 'permissions_overview' %}">🛡️ Roles & Permissions</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" href="{% url 'user_role_list' %}">👥 User → Role</a>
+    </li>
+  </ul>
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="fw-bold mb-0">Quản lý Role</h5>
+    <a href="{% url 'role_add' %}" class="btn btn-sm btn-primary">+ Thêm Role</a>
+  </div>
+
+  {% if not role_data %}
+  <div class="card p-5 text-center text-muted">
+    Chưa có role nào. <a href="{% url 'role_add' %}">Tạo role đầu tiên</a>.
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:.87rem">
+        <thead>
+          <tr>
+            <th style="min-width:160px">Role</th>
+            {% for group_name, perms in permission_groups %}
+            <th class="text-center perm-group-header" colspan="{{ perms|length }}">{{ group_name }}</th>
+            {% endfor %}
+            <th class="text-center">Users</th>
+            <th></th>
+          </tr>
+          <tr>
+            <th></th>
+            {% for group_name, perms in permission_groups %}
+            {% for code, label in perms %}
+            <th class="text-center" style="min-width:36px">
+              <span title="{{ label }}" style="font-size:.65rem;color:#6c757d;writing-mode:vertical-lr;
+                    transform:rotate(180deg);white-space:nowrap;display:inline-block;max-height:80px">
+                {{ label }}
+              </span>
+            </th>
+            {% endfor %}
+            {% endfor %}
+            <th></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in role_data %}
+          <tr>
+            <td>
+              <div class="role-name">{{ row.role.name }}</div>
+              <small class="text-muted font-monospace">{{ row.role.code }}</small>
+            </td>
+            {% for group_name, perms in permission_groups %}
+            {% for code, label in perms %}
+            <td class="text-center">
+              {% if code in row.granted %}
+              <span class="perm-yes" title="{{ label }}">✓</span>
+              {% else %}
+              <span class="perm-no" title="{{ label }}">·</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+            {% endfor %}
+            <td class="text-center">
+              <span class="badge bg-secondary">{{ row.user_count }}</span>
+            </td>
+            <td>
+              <div class="d-flex gap-1 justify-content-end">
+                <a href="{% url 'role_edit' pk=row.role.pk %}" class="btn btn-xs btn-outline-secondary">✏️</a>
+                <form method="post" action="{% url 'role_delete' pk=row.role.pk %}"
+                      onsubmit="return confirm('Xoá role {{ row.role.name }}?')">
+                  {% csrf_token %}
+                  <button class="btn btn-xs btn-outline-danger">🗑️</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}User → Role — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1">
+
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link" href="{% url 'permissions_overview' %}">🛡️ Roles & Permissions</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link active" href="{% url 'user_role_list' %}">👥 User → Role</a>
+    </li>
+  </ul>
+
+  <h5 class="fw-bold mb-3">Gán Role cho User</h5>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:.87rem">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Roles hiện tại</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in user_data %}
+          <tr>
+            <td>
+              <div class="fw-bold">{{ row.user.username }}</div>
+              {% if row.user.is_staff %}<span class="badge bg-danger">Staff</span>{% endif %}
+            </td>
+            <td class="text-muted small">{{ row.user.email|default:"—" }}</td>
+            <td>
+              {% for r in row.roles %}
+              <span class="badge bg-primary-soft text-primary me-1">{{ r.name }}</span>
+              {% empty %}
+              <span class="text-muted small">Chưa gán role</span>
+              {% endfor %}
+            </td>
+            <td>
+              <button class="btn btn-xs btn-outline-secondary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#assignModal{{ row.user.pk }}"
+                      {% if row.user.is_staff %}disabled title="Staff có toàn quyền"{% endif %}>
+                ✏️ Sửa
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{# Modals gán role #}
+{% for row in user_data %}
+{% if not row.user.is_staff %}
+<div class="modal fade" id="assignModal{{ row.user.pk }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'user_role_assign' user_pk=row.user.pk %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Gán role cho <strong>{{ row.user.username }}</strong></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {% with current_ids=row.roles|dictsort:"pk" %}
+          {% for role in all_roles %}
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="roles"
+                   value="{{ role.pk }}" id="r{{ row.user.pk }}_{{ role.pk }}"
+                   {% for r in row.roles %}{% if r.pk == role.pk %}checked{% endif %}{% endfor %}>
+            <label class="form-check-label" for="r{{ row.user.pk }}_{{ role.pk }}">
+              <span class="fw-semibold">{{ role.name }}</span>
+              <small class="text-muted font-monospace d-block">{{ role.code }}</small>
+            </label>
+          </div>
+          {% endfor %}
+          {% endwith %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Huỷ</button>
+          <button type="submit" class="btn btn-primary">Lưu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}

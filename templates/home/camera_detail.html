@@ -1,0 +1,507 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ camera.name }} — Camera Detail{% endblock %}
+
+{% block stylesheets %}
+<style>
+/* ── Layout ── */
+.detail-section { margin-bottom: 2rem; }
+.section-title { font-size: .85rem; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .08em; color: #6c757d; margin-bottom: .75rem; }
+
+/* ── Latest photo ── */
+.latest-photo { width:100%; aspect-ratio:16/9; object-fit:cover;
+                border-radius:.75rem; background:#12131a; }
+.latest-photo-ph { width:100%; aspect-ratio:16/9; background:#1a1b2e; border-radius:.75rem;
+                   display:flex; align-items:center; justify-content:center;
+                   color:#4a5568; flex-direction:column; gap:.5rem; }
+
+/* ── Device status ── */
+.device-stat { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem;
+               background:#f8f9fa; border-radius:.6rem; }
+.device-stat .ds-icon { font-size:1.2rem; }
+.device-stat .ds-label { font-size:.72rem; color:#6c757d; }
+.device-stat .ds-val { font-weight:700; font-size:.95rem; }
+
+/* ── Sparkline ── */
+.sparkline-wrap { display:flex; align-items:flex-end; gap:3px; height:40px; }
+.sparkline-wrap .sb { flex:1; border-radius:3px 3px 0 0; background:#0d6efd;
+                      opacity:.7; min-height:3px; transition:opacity .2s; }
+.sparkline-wrap .sb:hover { opacity:1; }
+
+/* ── Thumbgrid ── */
+.thumb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:.5rem; }
+.thumb-item { aspect-ratio:4/3; border-radius:.5rem; overflow:hidden; background:#1a1b2e;
+              cursor:pointer; transition:transform .15s; }
+.thumb-item:hover { transform:scale(1.04); }
+.thumb-item img { width:100%; height:100%; object-fit:cover; }
+
+/* ── Render status badge ── */
+.render-status { font-size:.72rem; font-weight:700; padding:.2em .6em; border-radius:12px; }
+.rs-pending    { background:#fff3cd; color:#856404; }
+.rs-processing { background:#cfe2ff; color:#084298; }
+.rs-ready      { background:#d1e7dd; color:#0a3622; }
+.rs-failed     { background:#f8d7da; color:#58151c; }
+
+/* ── Battery bar ── */
+.bat-track { height:.5rem; border-radius:3px; background:#dee2e6; overflow:hidden; }
+.bat-fill  { height:100%; border-radius:3px; }
+.bat-high  { background:#198754; }
+.bat-mid   { background:#fd7e14; }
+.bat-low   { background:#dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1">
+
+  {# Breadcrumb #}
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      {% if camera.site.client %}<li class="breadcrumb-item"><a href="{% url 'client_detail' pk=camera.site.client.pk %}">{{ camera.site.client.name }}</a></li>{% endif %}
+      {% if camera.site %}<li class="breadcrumb-item"><small>{{ camera.site.name }}</small></li>{% endif %}
+      <li class="breadcrumb-item active">{{ camera.name }}</li>
+    </ol>
+  </nav>
+
+  <div class="row g-4">
+
+    {# ── LEFT: ảnh mới nhất + sparkline ── #}
+    <div class="col-12 col-lg-5">
+
+      {# Ảnh mới nhất #}
+      <div class="detail-section">
+        <div class="section-title">📸 Ảnh mới nhất</div>
+        {% if latest_url %}
+        <a href="{{ latest_url }}" target="_blank">
+          <img src="{{ latest_url }}" class="latest-photo" alt="Latest photo">
+        </a>
+        {% if latest_media %}
+        <div class="text-muted small mt-1 text-center">{{ latest_media.taken_at|date:"d/m/Y H:i:s" }}</div>
+        {% endif %}
+        {% else %}
+        <div class="latest-photo-ph">
+          <span style="font-size:2.5rem">📷</span>
+          <span class="small">Chưa có ảnh</span>
+        </div>
+        {% endif %}
+      </div>
+
+      {# Device status #}
+      {% if device %}
+      <div class="detail-section">
+        <div class="section-title">📡 Trạng thái thiết bị</div>
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {# Online #}
+          <div class="device-stat flex-grow-1">
+            <span class="ds-icon">{% if device.is_online %}🟢{% else %}🔴{% endif %}</span>
+            <div>
+              <div class="ds-label">Trạng thái</div>
+              <div class="ds-val">{% if device.is_online %}Online{% else %}Offline{% endif %}</div>
+            </div>
+          </div>
+          {# Battery #}
+          {% if device.battery_percent is not None %}
+          <div class="device-stat flex-grow-1">
+            <span class="ds-icon">🔋</span>
+            <div>
+              <div class="ds-label">Pin</div>
+              <div class="ds-val">{{ device.battery_percent }}%</div>
+              <div class="bat-track mt-1" style="width:60px">
+                <div class="bat-fill {% if device.battery_percent >= 40 %}bat-high{% elif device.battery_percent >= 20 %}bat-mid{% else %}bat-low{% endif %}"
+                     style="width:{{ device.battery_percent }}%"></div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          {# Signal #}
+          {% if device.sim_signal_dbm is not None %}
+          <div class="device-stat flex-grow-1">
+            <span class="ds-icon">📶</span>
+            <div>
+              <div class="ds-label">Tín hiệu</div>
+              <div class="ds-val">{{ device.sim_signal_dbm }} dBm</div>
+            </div>
+          </div>
+          {% endif %}
+          {# Temp #}
+          {% if device.temperature_c is not None %}
+          <div class="device-stat flex-grow-1">
+            <span class="ds-icon">🌡️</span>
+            <div>
+              <div class="ds-label">Nhiệt độ</div>
+              <div class="ds-val">{{ device.temperature_c }}°C</div>
+            </div>
+          </div>
+          {% endif %}
+          {# Solar #}
+          {% if device.solar_voltage is not None %}
+          <div class="device-stat flex-grow-1">
+            <span class="ds-icon">☀️</span>
+            <div>
+              <div class="ds-label">Solar</div>
+              <div class="ds-val">{{ device.solar_voltage }}V</div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% if device.last_seen %}
+        <small class="text-muted">Cập nhật lần cuối: {{ device.last_seen|date:"d/m H:i" }}</small>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Sparkline 7 ngày #}
+      <div class="detail-section">
+        <div class="section-title">📊 Ảnh 7 ngày gần đây</div>
+        {% with max_count=days_7|dictsortreversed:"count"|first %}
+        {% if max_count and max_count.count > 0 %}
+        <div class="sparkline-wrap">
+          {% for d in days_7 %}
+          {% with pct=d.count|floatformat:0 %}
+          <div class="sb"
+               title="{{ d.date }}: {{ d.count }} ảnh"
+               style="height:{% if max_count.count > 0 %}{% widthratio d.count max_count.count 100 %}%{% else %}3px{% endif %}">
+          </div>
+          {% endwith %}
+          {% endfor %}
+        </div>
+        <div class="d-flex justify-content-between" style="font-size:.68rem;color:#aaa;margin-top:2px">
+          {% for d in days_7 %}
+          <span>{{ d.date }}</span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted small">Chưa có dữ liệu ảnh.</div>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+      {# Actions #}
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'media_gallery' camera_pk=camera.pk %}" class="btn btn-sm btn-outline-primary">
+          🖼️ Tất cả ảnh
+        </a>
+        <a href="{% url 'camera_live' pk=camera.pk %}" class="btn btn-sm btn-outline-success">
+          📺 Live view
+        </a>
+        {% if can_manage %}
+        <a href="{% url 'camera_edit' pk=camera.pk %}" class="btn btn-sm btn-outline-secondary">
+          ⚙️ Cài đặt
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── RIGHT: Thumbnail grid + Render video + Alert settings ── #}
+    <div class="col-12 col-lg-7">
+
+      {# Thumbnail grid #}
+      {% if recent_media %}
+      <div class="detail-section">
+        <div class="section-title">🗂️ Ảnh gần đây</div>
+        <div class="thumb-grid">
+          {% for item in recent_media %}
+          <div class="thumb-item" onclick="window.open('{{ item.thumb_url }}','_blank')" title="{{ item.media.taken_at|date:'d/m H:i' }}">
+            {% if item.thumb_url %}
+            <img src="{{ item.thumb_url }}" loading="lazy" alt="{{ item.media.taken_at|date:'d/m' }}">
+            {% else %}
+            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#555;font-size:.7rem">no img</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# ── Render Video ── #}
+      <div class="detail-section">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="section-title mb-0">🎬 Render Video Timelapse</div>
+          {% if can_manage or user_perms.media_view %}
+          <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#renderModal">
+            + Tạo video
+          </button>
+          {% endif %}
+        </div>
+
+        {% if renders %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle" style="font-size:.85rem">
+            <thead>
+              <tr>
+                <th>Khoảng ngày</th>
+                <th>FPS / Res</th>
+                <th>Frames</th>
+                <th>Size</th>
+                <th>Trạng thái</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in renders %}
+              <tr id="render-row-{{ r.id }}">
+                <td>{{ r.date_from|date:"d/m" }} → {{ r.date_to|date:"d/m/Y" }}</td>
+                <td>{{ r.fps }}fps / {{ r.resolution }}</td>
+                <td>{{ r.item_count }}</td>
+                <td>
+                  {% if r.size_bytes > 0 %}
+                    {{ r.size_bytes|filesizeformat }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  <span class="render-status rs-{{ r.status }}" id="render-status-{{ r.id }}">
+                    {{ r.get_status_display }}
+                  </span>
+                  {% if r.status == 'processing' %}
+                  <div class="progress mt-1" style="height:4px;width:80px">
+                    <div class="progress-bar" id="render-progress-{{ r.id }}"
+                         style="width:{{ r.progress }}%"></div>
+                  </div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r.status == 'ready' %}
+                  <a href="{% url 'render_download' pk=r.id %}" class="btn btn-xs btn-success" target="_blank">⬇️ Tải</a>
+                  {% elif r.status == 'failed' %}
+                  <span title="{{ r.error }}" class="text-danger small">⚠️</span>
+                  {% elif r.status in 'pending processing' %}
+                  <span class="text-muted small" id="render-eta-{{ r.id }}">⏳</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">Chưa có video nào được render. Nhấn <strong>+ Tạo video</strong> để bắt đầu.</p>
+        {% endif %}
+      </div>
+
+      {# ── Alert Settings ── #}
+      {% if can_manage %}
+      <div class="detail-section">
+        <div class="section-title">🔔 Ngưỡng cảnh báo</div>
+        <div class="card">
+          <div class="card-body">
+            <form method="post" action="{% url 'alert_settings_save' camera_pk=camera.pk %}" id="alertForm">
+              {% csrf_token %}
+
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="alertEnabled" name="enabled" value="1"
+                         {% if alert.enabled %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold" for="alertEnabled">Bật thông báo</label>
+                </div>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">🔋 Pin yếu (%)</label>
+                  <input type="number" name="battery_low_pct" class="form-control form-control-sm"
+                         value="{{ alert.battery_low_pct }}" min="1" max="100">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">🔋 Pin nguy hiểm (%)</label>
+                  <input type="number" name="battery_critical_pct" class="form-control form-control-sm"
+                         value="{{ alert.battery_critical_pct }}" min="1" max="100">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">📶 Tín hiệu yếu (dBm)</label>
+                  <input type="number" name="signal_weak_dbm" class="form-control form-control-sm"
+                         value="{{ alert.signal_weak_dbm }}" min="-120" max="0">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">⏱️ Offline sau (phút)</label>
+                  <input type="number" name="offline_minutes" class="form-control form-control-sm"
+                         value="{{ alert.offline_minutes }}" min="1">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">🌡️ Nhiệt độ cao (°C)</label>
+                  <input type="number" name="temperature_high_c" class="form-control form-control-sm"
+                         value="{{ alert.temperature_high_c }}">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small fw-semibold">📸 Ảnh tối thiểu/ngày</label>
+                  <input type="number" name="daily_photo_min" class="form-control form-control-sm"
+                         value="{{ alert.daily_photo_min }}" min="0" placeholder="0=tắt">
+                </div>
+                <div class="col-12">
+                  <label class="form-label small fw-semibold">✉️ Email nhận cảnh báo</label>
+                  <input type="email" name="notify_email" class="form-control form-control-sm"
+                         value="{{ alert.notify_email }}" placeholder="email@example.com">
+                </div>
+              </div>
+
+              <div class="mt-3 text-end">
+                <button type="submit" class="btn btn-sm btn-primary">💾 Lưu cảnh báo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+{# ── Modal tạo render ── #}
+<div class="modal fade" id="renderModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'render_create' camera_pk=camera.pk %}" id="renderForm">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">🎬 Tạo video timelapse</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Từ ngày</label>
+              <input type="date" name="date_from" class="form-control" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Đến ngày</label>
+              <input type="date" name="date_to" class="form-control" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">FPS</label>
+              <select name="fps" class="form-select">
+                <option value="6">6 fps (chậm)</option>
+                <option value="12">12 fps</option>
+                <option value="24" selected>24 fps (chuẩn)</option>
+                <option value="30">30 fps (mượt)</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Độ phân giải</label>
+              <select name="resolution" class="form-select">
+                {% for val, label in resolution_choices %}
+                <option value="{{ val }}" {% if val == '1920x1080' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Huỷ</button>
+          <button type="button" class="btn btn-primary" onclick="submitRenderForm()">🚀 Bắt đầu render</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+const RENDER_URL  = "{% url 'render_create' camera_pk=camera.pk %}";
+const CSRF_TOKEN  = '{{ csrf_token }}';
+
+// === Tạo render với SweetAlert2 confirm ===
+function submitRenderForm() {
+  const form = document.getElementById('renderForm');
+  const dateFrom = form.querySelector('[name=date_from]').value;
+  const dateTo   = form.querySelector('[name=date_to]').value;
+  const fps      = form.querySelector('[name=fps]').value;
+  const res      = form.querySelector('[name=resolution]').value;
+
+  if (!dateFrom || !dateTo) {
+    Swal.fire({icon:'warning', title:'Thiếu thông tin', text:'Vui lòng chọn khoảng ngày.'});
+    return;
+  }
+
+  Swal.fire({
+    title: 'Bắt đầu render?',
+    html: `Camera: <strong>{{ camera.name }}</strong><br>${dateFrom} → ${dateTo}<br>${fps} fps · ${res}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: '🚀 Render ngay',
+    cancelButtonText: 'Huỷ',
+    confirmButtonColor: '#0d6efd',
+  }).then(async (result) => {
+    if (!result.isConfirmed) return;
+
+    bootstrap.Modal.getInstance(document.getElementById('renderModal'))?.hide();
+
+    Swal.fire({
+      title: 'Đang tạo job...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const data = new FormData(form);
+      const res2 = await fetch(RENDER_URL, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF_TOKEN},
+        body: data,
+      });
+      const json = await res2.json();
+      if (json.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Đã tạo job render!',
+          html: 'Video đang được xử lý nền.<br><small>Bạn có thể theo dõi tại <a href="/renders/">trang Renders</a>.</small>',
+          confirmButtonText: 'OK',
+        }).then(() => location.reload());
+      } else {
+        Swal.fire({icon:'error', title:'Lỗi', text: json.error});
+      }
+    } catch(e) {
+      Swal.fire({icon:'error', title:'Lỗi kết nối', text: e.message});
+    }
+  });
+}
+
+// === Poll trạng thái render đang pending/processing ===
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[id^="render-status-"]').forEach(function(el) {
+    const status = el.textContent.trim().toLowerCase();
+    if (status === 'pending' || status === 'processing') {
+      const renderId = el.id.replace('render-status-', '');
+      pollRender(renderId);
+    }
+  });
+});
+
+function pollRender(id) {
+  const interval = setInterval(function() {
+    fetch('{% url "render_status" pk="00000000-0000-0000-0000-000000000000" %}'.replace('00000000-0000-0000-0000-000000000000', id))
+      .then(r => r.json())
+      .then(data => {
+        const statusEl   = document.getElementById('render-status-' + id);
+        const progressEl = document.getElementById('render-progress-' + id);
+        if (statusEl) {
+          statusEl.textContent = data.status;
+          statusEl.className   = 'render-status rs-' + data.status;
+        }
+        if (progressEl) progressEl.style.width = data.progress + '%';
+
+        if (data.status === 'ready' || data.status === 'failed') {
+          clearInterval(interval);
+          const etaEl = document.getElementById('render-eta-' + id);
+          if (data.status === 'ready' && data.download_url && etaEl) {
+            etaEl.innerHTML = `<a href="/renders/${id}/download/" class="btn btn-sm btn-success"><i class="fas fa-download me-1"></i>Tải</a>`;
+          }
+          if (data.status === 'failed' && etaEl) {
+            etaEl.innerHTML = '<span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i>Lỗi</span>';
+          }
+          if (data.status === 'ready') {
+            Swal.fire({
+              icon: 'success', title: 'Render hoàn tất!',
+              html: 'Video đã sẵn sàng để tải về.<br><a href="/renders/">Xem tất cả renders</a>',
+              timer: 5000, timerProgressBar: true,
+            });
+          }
+        }
+      })
+      .catch(() => clearInterval(interval));
+  }, 5000);
+}
+</script>
+{% endblock %}

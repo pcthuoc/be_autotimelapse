@@ -1,0 +1,68 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ action }} Client — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1" style="max-width:640px">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'client_list' %}">Clients</a></li>
+      {% if client %}<li class="breadcrumb-item"><a href="{% url 'client_detail' pk=client.pk %}">{{ client.name }}</a></li>{% endif %}
+      <li class="breadcrumb-item active">{{ action }}</li>
+    </ol>
+  </nav>
+
+  <div class="card">
+    <div class="card-header fw-bold">{{ action }} Client</div>
+    <div class="card-body">
+      {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+      <form method="post">
+        {% csrf_token %}
+        {% with fd=form_data|default:client %}
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tên khách hàng <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control"
+                 value="{{ fd.name|default:'' }}" required placeholder="VD: Công ty ABC">
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Người liên hệ</label>
+            <input type="text" name="contact_name" class="form-control"
+                   value="{{ fd.contact_name|default:'' }}" placeholder="Nguyễn Văn A">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Email</label>
+            <input type="email" name="contact_email" class="form-control"
+                   value="{{ fd.contact_email|default:'' }}" placeholder="contact@abc.com">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Điện thoại</label>
+          <input type="text" name="phone" class="form-control"
+                 value="{{ fd.phone|default:'' }}" placeholder="0912 345 678">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Địa chỉ</label>
+          <textarea name="address" class="form-control" rows="2"
+                    placeholder="Số 1, Đường ABC, Hà Nội">{{ fd.address|default:'' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Ghi chú</label>
+          <textarea name="notes" class="form-control" rows="3"
+                    placeholder="Ghi chú nội bộ...">{{ fd.notes|default:'' }}</textarea>
+        </div>
+
+        {% endwith %}
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{% url 'client_list' %}" class="btn btn-outline-secondary">Huỷ</a>
+          <button type="submit" class="btn btn-primary">{{ action }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

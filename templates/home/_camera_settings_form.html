@@ -1,0 +1,48 @@
+{% load i18n %}
+{% if can_manage %}
+<div class="border-top mt-3 pt-3" id="camSettingsSection">
+  <div class="d-flex align-items-center justify-content-between mb-2 gap-2 flex-wrap">
+    <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Camera settings" %}</span>
+    <div class="d-flex align-items-center gap-2">
+      <button type="button" id="camSettingsPull" class="btn btn-xs btn-outline-primary"
+              title="{% trans 'Read current configuration from the camera' %}">
+        <span class="cam-pull-spin spinner-border spinner-border-sm" style="display:none;width:.8rem;height:.8rem"></span>
+        ⤓ {% trans "Pull from device" %}
+      </button>
+      <span class="badge" id="camSettingsSyncBadge"
+            title="{% trans 'Saved to server only — not yet sent to camera.' %}">
+        {% if cam_settings.in_sync %}
+          <span class="badge bg-success-soft text-success">✓ {% trans "In sync" %}</span>
+        {% else %}
+          <span class="badge bg-secondary-soft text-secondary">◌ {% trans "Not synced" %}</span>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+
+  {% if camera.camera_model == "generic" %}
+  <p class="text-muted small">
+    {% trans "Set the camera model in Edit Camera to unlock profile-specific settings." %}
+  </p>
+  {% else %}
+  <form id="camSettingsForm" class="row g-2">
+    {% for field in camera_settings_form %}
+    <div class="col-6 col-xl-3">
+      <label class="form-label small mb-1" for="{{ field.id_for_label }}" title="{{ field.field.widget.attrs.title }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div class="text-danger" style="font-size:.72rem">{{ field.errors.as_text }}</div>{% endif %}
+    </div>
+    {% empty %}
+    <div class="col-12 text-muted small">{% trans "No configurable settings for this camera model." %}</div>
+    {% endfor %}
+
+    <div class="col-12 d-flex align-items-center gap-2 mt-2">
+      <button type="submit" id="camSettingsSave" class="btn btn-sm btn-dark">
+        <span class="cam-settings-spin spinner-border spinner-border-sm" style="display:none;width:.8rem;height:.8rem"></span>
+        {% trans "Save & send to camera" %}
+      </button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

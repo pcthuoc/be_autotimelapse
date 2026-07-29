@@ -1,0 +1,276 @@
+{% load i18n %}
+{# Nạp bằng AJAX vào #modalCameraDevice — data-* mang URL cho JS #}
+<div class="modal-content"
+     id="deviceModalContent"
+     data-latest-url="{% url 'camera_live_latest' camera.pk %}"
+     data-settings-url="{% url 'camera_device_settings' camera.pk %}"
+     data-wake-url="{% url 'camera_device_wake' camera.pk %}"
+     data-sim-url="{% url 'camera_device_sim' camera.pk %}"
+     data-camera-settings-url="{% url 'camera_settings_save' camera.pk %}"
+     data-camera-pull-url="{% url 'camera_settings_pull' camera.pk %}"
+     data-state-url="{% url 'camera_device_state' camera.pk %}"
+     data-live-url="{% url 'camera_live' camera.pk %}"
+     data-live-start-url="{% url 'live_view_start' camera.pk %}"
+     data-live-stop-url="{% url 'live_view_stop' camera.pk %}"
+     data-live-frame-url="{% url 'live_view_frame' camera.pk %}"
+     data-can-manage="{% if can_manage %}1{% else %}0{% endif %}">
+
+  {% csrf_token %}
+
+  <div class="modal-header py-2">
+    <h5 class="modal-title d-flex align-items-center gap-2">
+      {% if camera.status == 'active' %}
+        <span class="rounded-circle bg-success" style="width:9px;height:9px;display:inline-block"></span>
+      {% elif camera.status == 'maintenance' %}
+        <span class="rounded-circle bg-warning" style="width:9px;height:9px;display:inline-block"></span>
+      {% else %}
+        <span class="rounded-circle bg-secondary" style="width:9px;height:9px;display:inline-block"></span>
+      {% endif %}
+      <code class="fs-6">{{ camera.code }}</code>
+      <span class="text-muted fw-normal small">{{ camera.name }}</span>
+      {% if camera.camera_model and camera.camera_model != "generic" %}
+      <span class="badge bg-primary-soft text-primary" style="font-size:.65rem">{{ camera.get_camera_model_display }}</span>
+      {% else %}
+      <span class="badge bg-secondary-soft text-secondary" style="font-size:.65rem">Generic</span>
+      {% endif %}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  </div>
+
+  <div class="modal-body">
+    <div class="row g-3">
+
+      {# ══════════ LEFT: ảnh mới nhất ══════════ #}
+      <div class="col-12 col-lg-5">
+        <div class="dev-photo-wrap position-relative rounded overflow-hidden">
+          {% if latest_url %}
+            <img id="devLivePhoto" src="{{ latest_url }}" alt="latest">
+          {% else %}
+            <div id="devNoPhoto" class="dev-photo-empty">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              <span class="small mt-1">{% trans "No photos yet" %}</span>
+            </div>
+          {% endif %}
+          <img id="devLvFrame" alt="live frame"
+               style="display:none;width:100%;height:100%;object-fit:contain;position:absolute;top:0;left:0;background:#000">
+          <div class="dev-photo-overlay position-absolute bottom-0 start-0 end-0 d-flex justify-content-between align-items-center px-2 py-1">
+            <span id="devPhotoTime" class="text-white small">
+              {% if latest %}{{ latest.taken_at|date:"Y-m-d H:i:s" }} UTC{% else %}—{% endif %}
+            </span>
+            <span id="devRefreshSpin" class="spinner-border spinner-border-sm text-light" style="display:none"></span>
+            <span id="devLvBadge" class="badge bg-danger small" style="display:none">● LIVE</span>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-2">
+          <button type="button" id="devBtnRefresh" class="btn btn-sm btn-outline-primary flex-grow-1">
+            ↻ {% trans "Refresh" %}
+          </button>
+          {% if can_manage %}
+          <button type="button" id="devBtnWake" class="btn btn-sm btn-primary flex-grow-1"
+                  title="{% trans 'Ask device to capture a new photo now' %}">
+            <span class="dev-wake-spin spinner-border spinner-border-sm me-1" style="display:none;width:.8rem;height:.8rem"></span>
+            ⚡ {% trans "Capture now" %}
+          </button>
+          {% endif %}
+          <button type="button" id="devBtnLv" class="btn btn-sm btn-outline-danger"
+                  title="{% trans 'Toggle live view' %}">
+            ◉ Live
+          </button>
+          <a href="{% url 'camera_live' camera.pk %}" class="btn btn-sm btn-outline-secondary"
+             title="{% trans 'Open full live page' %}">⤢</a>
+        </div>
+        {% if device.wake_pending %}
+        <div id="devWakeNote" class="small text-warning mt-1">
+          ⚡ {% trans "Capture request pending — waiting for device check-in." %}
+        </div>
+        {% else %}
+        <div id="devWakeNote" class="small text-warning mt-1" style="display:none">
+          ⚡ {% trans "Capture request pending — waiting for device check-in." %}
+        </div>
+        {% endif %}
+
+        {# Photo counters #}
+        <div class="d-flex gap-3 mt-2 small text-muted">
+          <span>{% trans "Today" %}: <strong class="text-body">{{ today_count }}</strong></span>
+          <span>{% trans "Total" %}: <strong class="text-body">{{ total_count }}</strong></span>
+        </div>
+      </div>
+
+      {# ══════════ RIGHT: SIM, device settings, camera settings ══════════ #}
+      <div class="col-12 col-lg-7">
+        <div class="row g-3">
+      {# ══════════ SIM info ══════════ #}
+      <div class="col-12 col-md-7">
+        <div class="border rounded p-2 h-100">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "SIM info" %}</span>
+            <button type="button" id="devBtnSim" class="btn btn-xs btn-outline-primary">
+              <span class="dev-sim-spin spinner-border spinner-border-sm" style="display:none;width:.8rem;height:.8rem"></span>
+              📶 {% trans "Get SIM info" %}
+            </button>
+          </div>
+          <table class="table table-sm mb-0 small">
+            <tbody>
+              <tr>
+                <td class="text-muted ps-0 py-1" style="width:38%">{% trans "Phone number" %}</td>
+                <td class="py-1 text-end fw-semibold" id="devSimNumber">{{ device.sim_number|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-0 py-1">{% trans "Operator" %}</td>
+                <td class="py-1 text-end" id="devSimOp">{{ device.sim_operator|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-0 py-1">ICCID</td>
+                <td class="py-1 text-end" style="font-size:.72rem;word-break:break-all" id="devSimIccid">{{ device.sim_iccid|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted ps-0 py-1">{% trans "Signal" %}</td>
+                <td class="py-1 text-end" id="devSimSignal">
+                  {% if device.sim_signal_dbm != None %}{{ device.sim_signal_dbm }} dBm · {{ device.signal_label }}{% else %}—{% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="devSimNote" class="small text-warning mt-1" {% if not device.sim_query_pending %}style="display:none"{% endif %}>
+            📶 {% trans "SIM query pending — waiting for device check-in." %}
+          </div>
+        </div>
+      </div>
+
+      {# ══════════ Device settings ══════════ #}
+      <div class="col-12 col-md-5">
+        {% if can_manage %}
+          <div class="text-uppercase text-xs fw-bold opacity-50 mb-2">{% trans "Settings" %}</div>
+
+          {# Status buttons #}
+          <div class="mb-3">
+            <label class="form-label small mb-1">{% trans "Status" %}</label>
+            <div class="btn-group w-100" role="group">
+              <button type="button" class="btn btn-sm dev-status-btn {% if camera.status == 'active' %}btn-success{% else %}btn-outline-secondary{% endif %}" data-status="active">{% trans "Active" %}</button>
+              <button type="button" class="btn btn-sm dev-status-btn {% if camera.status == 'maintenance' %}btn-warning{% else %}btn-outline-secondary{% endif %}" data-status="maintenance">{% trans "Maint." %}</button>
+              <button type="button" class="btn btn-sm dev-status-btn {% if camera.status == 'inactive' %}btn-secondary{% else %}btn-outline-secondary{% endif %}" data-status="inactive">{% trans "Inactive" %}</button>
+            </div>
+          </div>
+
+          {# Capture interval #}
+          <div class="mb-2">
+            <label class="form-label small mb-1" for="devInterval">{% trans "Capture interval" %}</label>
+            <div class="input-group input-group-sm">
+              <input type="number" id="devInterval" class="form-control" min="30" max="86400" step="30"
+                     value="{{ device.capture_interval_sec }}">
+              <span class="input-group-text">{% trans "sec" %}</span>
+              <button type="button" id="devBtnSaveSettings" class="btn btn-primary">{% trans "Save" %}</button>
+            </div>
+            <div class="form-text">
+              {% trans "Applied on next device check-in." %}
+            </div>
+          </div>
+        {% endif %}
+      </div>{# /right: settings #}
+        </div>{# /SIM + settings row #}
+
+        {% include "home/_camera_settings_form.html" %}
+      </div>{# /right controls #}
+    </div>{# /row #}
+
+    {# ══════════ DEVICE telemetry (hàng ngang) ══════════ #}
+    <div class="d-flex align-items-center justify-content-between mt-3 mb-2">
+      <span class="text-uppercase text-xs fw-bold opacity-50">{% trans "Device" %}</span>
+      {% if device_online %}
+        <span id="devOnlineBadge" class="badge bg-success-soft text-success">● {% trans "Online" %}</span>
+      {% else %}
+        <span id="devOnlineBadge" class="badge bg-secondary-soft text-secondary">○ {% trans "Offline" %}</span>
+      {% endif %}
+    </div>
+    <div class="row row-cols-2 row-cols-md-4 g-2">
+
+      {# SIM signal #}
+      <div class="col">
+        <div class="dev-tile">
+          <div class="dev-tile-top">
+            <span class="dev-sig">
+              {% with bars=device.signal_bars %}
+              {% for i in "1234" %}
+                <span class="dev-sig-bar {% if bars and forloop.counter <= bars %}on{% endif %}"
+                      style="height:{{ forloop.counter }}0%"></span>
+              {% endfor %}
+              {% endwith %}
+            </span>
+            <span class="dev-tile-label">SIM</span>
+          </div>
+          <div class="dev-tile-val" id="devSimDbm">
+            {% if device.sim_signal_dbm != None %}{{ device.sim_signal_dbm }} dBm{% else %}—{% endif %}
+          </div>
+          <div class="dev-tile-sub" id="devSimOperator">{{ device.sim_operator|default:device.signal_label }}</div>
+        </div>
+      </div>
+
+      {# Temperature + Humidity #}
+      <div class="col">
+        <div class="dev-tile">
+          <div class="dev-tile-top">
+            <svg class="dev-ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 13V5a2 2 0 114 0v8a4 4 0 11-4 0z" stroke-width="2"/></svg>
+            <span class="dev-tile-label">{% trans "Temp / Humidity" %}</span>
+          </div>
+          <div class="dev-tile-val">
+            {% if device.temperature_c != None %}{{ device.temperature_c }}°C{% else %}—{% endif %}
+          </div>
+          <div class="dev-tile-sub">
+            💧 {% if device.humidity_percent != None %}{{ device.humidity_percent }}%{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# Battery #}
+      <div class="col">
+        <div class="dev-tile">
+          <div class="dev-tile-top">
+            <svg class="dev-ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="7" width="16" height="10" rx="2" stroke-width="2"/><path d="M20 10v4" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="dev-tile-label">{% trans "Battery" %}{% if device.is_charging %} ⚡{% endif %}</span>
+          </div>
+          <div class="dev-tile-val">
+            {% if device.battery_percent != None %}{{ device.battery_percent }}%{% else %}—{% endif %}
+          </div>
+          <div class="dev-tile-sub">
+            {% if device.battery_voltage != None %}{{ device.battery_voltage }} V{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# Solar #}
+      <div class="col">
+        <div class="dev-tile">
+          <div class="dev-tile-top">
+            <svg class="dev-ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="dev-tile-label">Solar</span>
+          </div>
+          <div class="dev-tile-val">
+            {% if device.solar_voltage != None %}{{ device.solar_voltage }} V{% else %}—{% endif %}
+          </div>
+          <div class="dev-tile-sub">
+            {% if device.solar_percent != None %}{{ device.solar_percent }}%{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Cell voltages #}
+    {% if device.cell_voltages %}
+    <div class="mt-2">
+      <div class="text-uppercase text-xs fw-bold opacity-50 mb-1">{% trans "Cell voltages" %}</div>
+      <div class="d-flex flex-wrap gap-1">
+        {% for v in device.cell_voltages %}
+        <span class="badge dev-cell">{{ forloop.counter }}: {{ v }}V</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>{# /modal-body #}
+</div>
+

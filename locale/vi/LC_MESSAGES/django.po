@@ -1,0 +1,552 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-24 17:11+0700\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: core/forms.py:17 core/forms.py:39 core/forms.py:172
+#: templates/accounts/login.html:31 templates/accounts/register.html:39
+#: templates/home/users.html:35
+msgid "Username"
+msgstr "Tên đăng nhập"
+
+#: core/forms.py:25 core/forms.py:178 core/forms.py:179
+#: templates/accounts/login.html:44 templates/accounts/register.html:65
+msgid "Password"
+msgstr "Mật khẩu"
+
+#: core/forms.py:47 core/forms.py:175 templates/accounts/register.html:52
+#: templates/home/users.html:36
+msgid "Email"
+msgstr "Email"
+
+#: core/forms.py:54
+msgid "Password (min. 8 characters)"
+msgstr "Mật khẩu (tối thiểu 8 ký tự)"
+
+#: core/forms.py:61 core/forms.py:182 core/forms.py:183
+#: templates/accounts/register.html:78
+msgid "Confirm password"
+msgstr "Xác nhận mật khẩu"
+
+#: core/forms.py:68
+msgid "You must accept the terms and conditions."
+msgstr "Bạn phải đồng ý điều khoản sử dụng để đăng ký."
+
+#: core/forms.py:79 core/forms.py:200
+msgid "Username may only contain letters, digits and: @ . + - _"
+msgstr "Tên đăng nhập chỉ được chứa chữ cái a-z, chữ số và ký tự: @ . + - _"
+
+#: core/forms.py:82 core/forms.py:203
+msgid "This username is already taken."
+msgstr "Tên đăng nhập này đã được sử dụng."
+
+#: core/forms.py:88 core/forms.py:209
+msgid "This email is already registered."
+msgstr "Email này đã được đăng ký."
+
+#: core/forms.py:102
+msgid "Site name"
+msgstr "Tên công trình"
+
+#: core/forms.py:110
+msgid "Description (optional)"
+msgstr "Mô tả (tuỳ chọn)"
+
+#: core/forms.py:124
+msgid "Camera code (e.g. CAM-01)"
+msgstr "Mã camera (VD: CAM-01)"
+
+#: core/forms.py:131
+msgid "Display name"
+msgstr "Tên hiển thị"
+
+#: core/forms.py:137
+msgid "— Select site —"
+msgstr "— Chọn công trình —"
+
+#: core/forms.py:159
+msgid "This camera code already exists."
+msgstr "Mã camera này đã tồn tại."
+
+#: core/forms.py:188 core/forms.py:224
+msgid "— No role —"
+msgstr "— Không có vai trò —"
+
+#: core/forms.py:229 templates/home/users.html:134
+msgid "Active account"
+msgstr "Tài khoản đang hoạt động"
+
+#: core/forms.py:262 templates/includes/sidebar.html:65
+msgid "Users"
+msgstr "Người dùng"
+
+#: core/forms.py:270 templates/home/camera_access.html:94
+#: templates/home/camera_access.html:170
+msgid "View camera"
+msgstr "Xem camera"
+
+#: core/forms.py:275 templates/home/camera_access.html:98
+#: templates/home/camera_access.html:171
+msgid "Manage camera"
+msgstr "Quản lý camera"
+
+#: core/forms.py:280 templates/home/camera_access.html:102
+#: templates/home/camera_access.html:172
+msgid "Download media"
+msgstr "Tải media"
+
+#: core/forms.py:285 templates/home/_camera_access_body.html:76
+#: templates/home/_camera_access_body.html:108
+#: templates/home/_camera_access_body.html:119
+#: templates/home/camera_access.html:34 templates/home/camera_access.html:106
+#: templates/home/camera_access.html:173
+msgid "Delete media"
+msgstr "Xóa media"
+
+#: core/forms.py:302
+msgid "You must grant at least one permission."
+msgstr "Bạn phải cấp ít nhất một quyền."
+
+#: core/views/auth.py:39
+msgid "Invalid username or password."
+msgstr "Tên đăng nhập hoặc mật khẩu không đúng."
+
+#: core/views/auth.py:41
+msgid "Please check your login details."
+msgstr "Vui lòng kiểm tra lại thông tin đăng nhập."
+
+#: core/views/auth.py:56
+msgid "Account created! You can now log in."
+msgstr "Tạo tài khoản thành công! Bạn có thể đăng nhập ngay."
+
+#: core/views/auth.py:59
+msgid "Please check your registration details."
+msgstr "Vui lòng kiểm tra lại thông tin đăng ký."
+
+#: templates/accounts/login.html:4 templates/accounts/login.html:68
+#: templates/accounts/register.html:118
+msgid "Sign In"
+msgstr "Đăng nhập"
+
+#: templates/accounts/login.html:19
+msgid "Sign in to your account"
+msgstr "Đăng nhập vào hệ thống"
+
+#: templates/accounts/login.html:61
+msgid "Remember me"
+msgstr "Ghi nhớ đăng nhập"
+
+#: templates/accounts/login.html:64
+msgid "Forgot password?"
+msgstr "Quên mật khẩu?"
+
+#: templates/accounts/login.html:74
+msgid "No account?"
+msgstr "Chưa có tài khoản?"
+
+#: templates/accounts/login.html:75
+msgid "Create one"
+msgstr "Tạo tài khoản"
+
+#: templates/accounts/register.html:4 templates/accounts/register.html:110
+msgid "Create Account"
+msgstr "Tạo tài khoản"
+
+#: templates/accounts/register.html:23
+msgid "Sign in now"
+msgstr "Đăng nhập ngay"
+
+#: templates/accounts/register.html:30
+msgid "Create a new account"
+msgstr "Tạo tài khoản mới"
+
+#: templates/accounts/register.html:99
+msgid "I agree to the"
+msgstr "Tôi đồng ý với"
+
+#: templates/accounts/register.html:99
+msgid "terms and conditions"
+msgstr "điều khoản sử dụng"
+
+#: templates/accounts/register.html:117
+msgid "Already have an account?"
+msgstr "Đã có tài khoản?"
+
+#: templates/home/_camera_access_body.html:6 templates/home/cameras.html:86
+msgid "Manage access"
+msgstr "Quản lý quyền truy cập"
+
+#: templates/home/_camera_access_body.html:21
+msgid "user(s) with access"
+msgstr "người dùng có quyền"
+
+#: templates/home/_camera_access_body.html:26
+#: templates/home/_camera_access_body.html:81
+#: templates/home/camera_access.html:20 templates/home/camera_access.html:178
+msgid "Grant access"
+msgstr "Cấp quyền"
+
+#: templates/home/_camera_access_body.html:40
+msgid "No users selected yet"
+msgstr "Chưa chọn người dùng"
+
+#: templates/home/_camera_access_body.html:47
+msgid "Type a name to search…"
+msgstr "Nhập tên để tìm…"
+
+#: templates/home/_camera_access_body.html:63
+msgid "Everyone already has access."
+msgstr "Tất cả đã có quyền truy cập."
+
+#: templates/home/_camera_access_body.html:72
+#: templates/home/camera_access.html:168
+msgid "Permissions"
+msgstr "Quyền"
+
+#: templates/home/_camera_access_body.html:73
+#: templates/home/_camera_access_body.html:105
+#: templates/home/_camera_access_body.html:116
+#: templates/home/camera_access.html:31
+msgid "View"
+msgstr "Xem"
+
+#: templates/home/_camera_access_body.html:74
+#: templates/home/_camera_access_body.html:106
+#: templates/home/_camera_access_body.html:117
+#: templates/home/camera_access.html:32
+msgid "Manage"
+msgstr "Quản lý"
+
+#: templates/home/_camera_access_body.html:75
+#: templates/home/_camera_access_body.html:107
+#: templates/home/_camera_access_body.html:118
+#: templates/home/_media_items.html:15 templates/home/camera_access.html:33
+msgid "Download"
+msgstr "Tải xuống"
+
+#: templates/home/_camera_access_body.html:80
+#: templates/home/_camera_access_body.html:123
+#: templates/home/camera_access.html:113 templates/home/camera_access.html:177
+#: templates/home/cameras.html:134 templates/home/cameras.html:157
+#: templates/home/cameras.html:188 templates/home/cameras.html:214
+#: templates/home/users.html:138 templates/home/users.html:170
+msgid "Cancel"
+msgstr "Huỷ"
+
+#: templates/home/_camera_access_body.html:109
+msgid "No permissions"
+msgstr "Không có quyền"
+
+#: templates/home/_camera_access_body.html:124
+#: templates/home/camera_access.html:114 templates/home/cameras.html:135
+#: templates/home/users.html:139
+msgid "Save changes"
+msgstr "Lưu thay đổi"
+
+#: templates/home/_camera_access_body.html:132
+#: templates/home/camera_access.html:55 templates/home/cameras.html:78
+#: templates/home/cameras.html:121 templates/home/users.html:79
+msgid "Edit"
+msgstr "Chỉnh sửa"
+
+#: templates/home/_camera_access_body.html:137
+#: templates/home/camera_access.html:61
+msgid "Revoke"
+msgstr "Thu hồi"
+
+#: templates/home/_camera_access_body.html:146
+#: templates/home/camera_access.html:71
+msgid "No users have been granted access to this camera."
+msgstr "Chưa có người dùng nào được cấp quyền cho camera này."
+
+#: templates/home/_camera_access_body.html:156
+msgid "user(s) have access to this camera"
+msgstr "người dùng có quyền truy cập camera này"
+
+#: templates/home/_camera_access_body.html:158
+msgid "No one has access yet — grant access above"
+msgstr "Chưa ai có quyền — cấp quyền ở trên"
+
+#: templates/home/_camera_access_body.html:161
+msgid "Close"
+msgstr "Đóng"
+
+#: templates/home/_media_page.html:17
+msgid "Chọn"
+msgstr "Chọn"
+
+#: templates/home/_media_page.html:30
+msgid "No photos."
+msgstr "Không có ảnh nào."
+
+#: templates/home/_media_page.html:55
+msgid "Page"
+msgstr "Trang"
+
+#: templates/home/_media_page.html:55 templates/home/media_gallery.html:20
+msgid "photos"
+msgstr "ảnh"
+
+#: templates/home/camera_access.html:4
+msgid "Camera Access"
+msgstr "Phân quyền Camera"
+
+#: templates/home/camera_access.html:30
+msgid "User"
+msgstr "Người dùng"
+
+#: templates/home/camera_access.html:35
+msgid "Granted by"
+msgstr "Được cấp bởi"
+
+#: templates/home/camera_access.html:36 templates/home/users.html:39
+msgid "Actions"
+msgstr "Thao tác"
+
+#: templates/home/camera_access.html:62
+msgid "Revoke access for"
+msgstr "Thu hồi quyền của"
+
+#: templates/home/camera_access.html:87
+msgid "Edit permissions"
+msgstr "Chỉnh sửa quyền"
+
+#: templates/home/camera_access.html:94
+msgid "See camera in list"
+msgstr "Xem camera trong danh sách"
+
+#: templates/home/camera_access.html:98
+msgid "Edit settings"
+msgstr "Chỉnh sửa cài đặt"
+
+#: templates/home/camera_access.html:102
+msgid "Download photos/videos"
+msgstr "Tải ảnh/video"
+
+#: templates/home/camera_access.html:106
+msgid "Permanently delete files"
+msgstr "Xóa file vĩnh viễn"
+
+#: templates/home/camera_access.html:127
+msgid "Grant camera access"
+msgstr "Cấp quyền truy cập camera"
+
+#: templates/home/cameras.html:17
+msgid "Search cameras…"
+msgstr "Tìm camera…"
+
+#: templates/home/cameras.html:26 templates/home/cameras.html:201
+msgid "Add Site"
+msgstr "Thêm Công trình"
+
+#: templates/home/cameras.html:30 templates/home/cameras.html:108
+#: templates/home/cameras.html:189
+msgid "Add Camera"
+msgstr "Thêm Camera"
+
+#: templates/home/cameras.html:48 templates/home/users.html:70
+msgid "Active"
+msgstr "Hoạt động"
+
+#: templates/home/cameras.html:52
+msgid "Maintenance"
+msgstr "Bảo trì"
+
+#: templates/home/cameras.html:56
+msgid "Inactive"
+msgstr "Không hoạt động"
+
+#: templates/home/cameras.html:93
+msgid "Delete"
+msgstr "Xóa"
+
+#: templates/home/cameras.html:107
+msgid "No cameras yet."
+msgstr "Chưa có camera nào."
+
+#: templates/home/cameras.html:149
+msgid "Confirm delete"
+msgstr "Xác nhận xóa"
+
+#: templates/home/cameras.html:153 templates/home/cameras.html:158
+msgid "Delete camera"
+msgstr "Xóa camera"
+
+#: templates/home/cameras.html:154
+msgid "This action cannot be undone."
+msgstr "Thao tác này không thể hoàn tác."
+
+#: templates/home/cameras.html:175
+msgid "Add new Camera"
+msgstr "Thêm Camera mới"
+
+#: templates/home/cameras.html:215
+msgid "Create Site"
+msgstr "Tạo Công trình"
+
+#: templates/home/cameras.html:234
+msgid "Loading…"
+msgstr "Đang tải…"
+
+#: templates/home/media_gallery.html:25
+msgid "Download bundle"
+msgstr "Gói tải"
+
+#: templates/home/media_gallery.html:34
+msgid "Date"
+msgstr "Ngày"
+
+#: templates/home/media_gallery.html:36
+msgid "All"
+msgstr "Tất cả"
+
+#: templates/home/media_gallery.html:42
+msgid "— Quick select date —"
+msgstr "— Chọn nhanh ngày —"
+
+#: templates/home/media_gallery.html:56
+msgid "Select all"
+msgstr "Chọn tất cả"
+
+#: templates/home/media_gallery.html:57
+msgid "Deselect"
+msgstr "Bỏ chọn"
+
+#: templates/home/media_gallery.html:60
+msgid "Download selected"
+msgstr "Tải mục đã chọn"
+
+#: templates/home/media_gallery.html:64
+msgid "Download all today"
+msgstr "Tải tất cả hôm nay"
+
+#: templates/home/media_gallery.html:71
+msgid "Range"
+msgstr "Khoảng thời gian"
+
+#: templates/home/media_gallery.html:75
+msgid "Download range"
+msgstr "Tải theo khoảng"
+
+#: templates/home/media_gallery.html:104
+msgid "Download photo"
+msgstr "Tải ảnh"
+
+#: templates/home/media_gallery.html:125
+msgid "Your download bundles"
+msgstr "Gói tải của bạn"
+
+#: templates/home/media_gallery.html:129
+msgid ""
+"Archive is created in the background. When status is Ready, click to "
+"download. Link expires after some time."
+msgstr ""
+"File nén được tạo ở nền. Khi trạng thái là Sẵn sàng, nhấn để tải. Link sẽ hết hạn sau một thời gian."
+
+#: templates/home/media_home.html:10
+msgid "Media"
+msgstr "Media"
+
+#: templates/home/media_home.html:11
+msgid "Timelapse photos by camera"
+msgstr "Ảnh timelapse theo từng camera"
+
+#: templates/home/media_home.html:19
+msgid "Search cameras by code or name…"
+msgstr "Tìm camera theo mã hoặc tên…"
+
+#: templates/home/media_home.html:48
+msgid "Latest"
+msgstr "Mới nhất"
+
+#: templates/home/media_home.html:50
+msgid "No photos yet"
+msgstr "Chưa có ảnh"
+
+#: templates/home/media_home.html:61
+msgid "No cameras found."
+msgstr "Không tìm thấy camera."
+
+#: templates/home/media_home.html:61
+msgid "You don't have access to any camera."
+msgstr "Bạn chưa có quyền xem ảnh của camera nào."
+
+#: templates/home/users.html:4
+msgid "User Management"
+msgstr "Quản lý người dùng"
+
+#: templates/home/users.html:18
+msgid "Search by username or email…"
+msgstr "Tìm theo tên đăng nhập hoặc email…"
+
+#: templates/home/users.html:25 templates/home/users.html:171
+msgid "Add User"
+msgstr "Thêm người dùng"
+
+#: templates/home/users.html:37 templates/home/users.html:127
+msgid "Role"
+msgstr "Vai trò"
+
+#: templates/home/users.html:38
+msgid "Status"
+msgstr "Trạng thái"
+
+#: templates/home/users.html:72
+msgid "Disabled"
+msgstr "Đã khóa"
+
+#: templates/home/users.html:101
+msgid "No users found."
+msgstr "Không tìm thấy người dùng."
+
+#: templates/home/users.html:120
+msgid "Edit user"
+msgstr "Chỉnh sửa người dùng"
+
+#: templates/home/users.html:156
+msgid "Add new user"
+msgstr "Thêm người dùng mới"
+
+#: templates/includes/pagination.html:5
+#, python-format
+msgid ""
+"\n"
+"      Showing %(start)s–%(end)s of %(total)s\n"
+"    "
+msgstr ""
+"\n"
+"      Hiển thị %(start)s–%(end)s trong %(total)s\n"
+"    "
+
+#~ msgid "Manage camera devices in AutoTimelapse."
+#~ msgstr "Quản lý thiết bị camera trong hệ thống AutoTimelapse."
+
+#~ msgid "Code"
+#~ msgstr "Mã"
+
+#~ msgid "Camera name"
+#~ msgstr "Tên camera"
+
+#~ msgid "Site"
+#~ msgstr "Công trình"
+
+#~ msgid "Timezone"
+#~ msgstr "Múi giờ"
+
+#~ msgid "Add one"
+#~ msgstr "Thêm ngay"

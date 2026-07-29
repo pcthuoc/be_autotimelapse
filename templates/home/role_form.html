@@ -1,0 +1,73 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ action }} Role — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1" style="max-width:720px">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'permissions_overview' %}">Phân quyền</a></li>
+      <li class="breadcrumb-item active">{{ action }} Role</li>
+    </ol>
+  </nav>
+
+  <div class="card">
+    <div class="card-header fw-bold">{{ action }} Role</div>
+    <div class="card-body">
+      {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3 mb-4">
+          {% if not role %}
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold">Code <span class="text-danger">*</span></label>
+            <input type="text" name="code" class="form-control font-monospace"
+                   value="{{ form_data.code|default:'' }}" required placeholder="viewer, operator...">
+            <div class="form-text">Chỉ lowercase, a-z, dấu gạch dưới</div>
+          </div>
+          {% endif %}
+          <div class="col-sm-{% if role %}12{% else %}8{% endif %}">
+            <label class="form-label fw-semibold">Tên hiển thị <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control"
+                   value="{{ form_data.name|default:role.name|default:'' }}" required placeholder="VD: Xem camera">
+          </div>
+        </div>
+
+        {# Permissions checkboxes #}
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Quyền (Permissions)</label>
+          {% for group_name, perms in permission_groups %}
+          <div class="mb-3">
+            <div class="fw-bold small text-uppercase text-muted mb-2">{{ group_name }}</div>
+            <div class="row g-2">
+              {% for code, label in perms %}
+              <div class="col-12 col-sm-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="perms"
+                         value="{{ code }}" id="perm_{{ code|cut:'.'|cut:' ' }}"
+                         {% if code in granted %}checked{% endif %}
+                         {% if code in form_data.perms %}checked{% endif %}>
+                  <label class="form-check-label" for="perm_{{ code|cut:'.'|cut:' ' }}">
+                    <span class="fw-semibold">{{ label }}</span>
+                    <small class="text-muted font-monospace d-block">{{ code }}</small>
+                  </label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{% url 'permissions_overview' %}" class="btn btn-outline-secondary">Huỷ</a>
+          <button type="submit" class="btn btn-primary">{{ action }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

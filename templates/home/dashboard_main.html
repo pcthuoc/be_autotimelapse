@@ -1,0 +1,342 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Dashboard — AutoTimelapse{% endblock %}
+
+{% block stylesheets %}
+<style>
+/* ── Stat cards ── */
+.stat-card { transition:box-shadow .2s; }
+.stat-icon { width:3rem; height:3rem; border-radius:.6rem;
+             display:flex; align-items:center; justify-content:center; }
+.stat-icon svg { width:1.4rem; height:1.4rem; }
+
+/* ── Sparkline ── */
+.sparkline-bar { display:flex; align-items:flex-end; gap:3px; height:42px; }
+.sparkline-bar .sb { flex:1; border-radius:3px 3px 0 0;
+                     background:var(--accent); opacity:.75;
+                     transition:opacity .2s; min-height:3px; }
+.sparkline-bar .sb:hover { opacity:1; }
+
+/* ── Site card ── */
+.site-thumb { aspect-ratio:16/9; overflow:hidden; background:var(--bg-primary); position:relative; }
+.site-thumb img { width:100%; height:100%; object-fit:cover; }
+.site-thumb-ph { position:absolute; inset:0; display:flex; flex-direction:column;
+                 align-items:center; justify-content:center; color:var(--text-muted); }
+
+/* ── Camera row in site ── */
+.cam-row { display:flex; align-items:center; gap:.75rem;
+           padding:.55rem .75rem; border-radius:.5rem; transition:background .15s; }
+.cam-row:hover { background:var(--bg-hover); }
+.cam-mini { width:4.5rem; height:3rem; border-radius:.4rem;
+            overflow:hidden; background:var(--bg-primary); flex-shrink:0; }
+.cam-mini img { width:100%; height:100%; object-fit:cover; }
+.cam-mini-ph { width:100%; height:100%; display:flex; align-items:center;
+               justify-content:center; color:var(--text-muted); }
+.online-dot { width:.55rem; height:.55rem; border-radius:50%; flex-shrink:0; }
+.online-dot.on  { background:var(--status-ok); box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+.online-dot.off { background:var(--text-tertiary); }
+
+/* Battery bar */
+.bat-bar { width:2.5rem; height:.5rem; border-radius:2px;
+           background:var(--bg-tertiary); overflow:hidden; }
+.bat-fill { height:100%; border-radius:2px; }
+.bat-fill.high { background:var(--status-ok); }
+.bat-fill.mid  { background:var(--status-warning); }
+.bat-fill.low  { background:var(--status-error); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1">
+
+  {# ── Header ── #}
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="mb-0 fw-bold">📊 Dashboard</h4>
+      <small class="text-muted">{{ now|date:"d/m/Y H:i" }}</small>
+    </div>
+    <a href="{% url 'camera_list' %}" class="btn btn-sm btn-outline-primary">
+      <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+      </svg>
+      {% trans "Cameras" %}
+    </a>
+  </div>
+
+  {# ── Stat cards ── #}
+  <div class="row g-3 mb-4">
+
+    <div class="col-6 col-md-3">
+      <div class="card stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_sites }}</div>
+            <div class="text-muted small">{% trans "Sites" %}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon bg-info bg-opacity-10 text-info">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_cameras }}</div>
+            <div class="text-muted small">{% trans "Cameras" %}
+              <span class="badge bg-success-soft text-success ms-1">{{ online_count }} online</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ today_photos }}</div>
+            <div class="text-muted small">{% trans "Photos today" %}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="card stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon bg-success bg-opacity-10 text-success">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">
+              {% if total_bytes >= 1073741824 %}
+                {{ total_bytes|filesizeformat }}
+              {% elif total_bytes >= 1048576 %}
+                {{ total_bytes|filesizeformat }}
+              {% else %}
+                {{ total_bytes|filesizeformat }}
+              {% endif %}
+            </div>
+            <div class="text-muted small">{% trans "Storage used" %} · {{ total_photos }} ảnh</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Sparkline 7 ngày ── #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between py-2">
+      <span class="fw-semibold small">📷 {% trans "Photos per day" %} (7 ngày)</span>
+    </div>
+    <div class="card-body py-3">
+      {% with max_cnt=days_7|dictsortreversed:"count"|first %}
+      {% with maxv=max_cnt.count %}
+      <div class="d-flex align-items-flex-end gap-2">
+        <div class="sparkline-bar flex-grow-1" id="sparkBar">
+          {% for d in days_7 %}
+          <div class="sb"
+               style="height:{% if maxv > 0 %}{{ d.count|floatformat:0 }}{% else %}0{% endif %}px;
+                      max-height:42px;
+                      {% if maxv > 0 %}height:calc({{ d.count }} / {{ maxv }} * 42px){% endif %}"
+               title="{{ d.date }}: {{ d.count }} ảnh"></div>
+          {% endfor %}
+        </div>
+        <div class="text-muted small ms-2 text-end" style="min-width:60px">
+          {% for d in days_7 %}
+          <div style="height:6px; line-height:6px; font-size:9px; margin-bottom:0px"></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="d-flex justify-content-between mt-1">
+        {% for d in days_7 %}
+        <span class="text-muted" style="font-size:.65rem">{{ d.date }}</span>
+        {% endfor %}
+      </div>
+      {% endwith %}
+      {% endwith %}
+    </div>
+  </div>
+
+  {# ── Sites ── #}
+  {% for sd in sites_data %}
+  <div class="card shadow-sm mb-4 site-card">
+    <div class="card-header d-flex align-items-center justify-content-between py-2 px-3">
+      <div class="d-flex align-items-center gap-2">
+        <svg class="icon icon-xs text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span class="fw-semibold">{{ sd.site.name }}</span>
+        {% if sd.site.description %}
+        <span class="text-muted small d-none d-md-inline">— {{ sd.site.description|truncatechars:60 }}</span>
+        {% endif %}
+      </div>
+      <div class="d-flex align-items-center gap-2 text-muted small">
+        <span>{{ sd.cam_count }} cam</span>
+        <span class="badge bg-success-soft text-success">{{ sd.online_count }} online</span>
+        <span>{{ sd.today_count }} ảnh hôm nay</span>
+      </div>
+    </div>
+
+    <div class="card-body p-0">
+      {# Preview ảnh mới nhất của site #}
+      {% if sd.latest_thumb_url %}
+      <div class="row g-0">
+        <div class="col-md-3">
+          <div class="site-thumb" style="max-height:180px">
+            <img src="{{ sd.latest_thumb_url }}" alt="{{ sd.site.name }}" loading="lazy">
+            {% if sd.latest_media %}
+            <div class="position-absolute bottom-0 start-0 p-2">
+              <span class="badge bg-dark bg-opacity-75 text-white" style="font-size:.65rem">
+                📷 {{ sd.latest_media.camera.code }} · {{ sd.latest_media.taken_at|date:"d/m H:i" }}
+              </span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-9">
+      {% else %}
+      <div class="row g-0">
+        <div class="col-12">
+      {% endif %}
+          {# Camera list #}
+          <div class="px-2 py-1">
+            {% for cr in sd.cameras %}
+            <div class="cam-row">
+              {# Mini thumb #}
+              <div class="cam-mini">
+                {% if cr.thumb_url %}
+                <img src="{{ cr.thumb_url }}" alt="{{ cr.cam.code }}" loading="lazy">
+                {% else %}
+                <div class="cam-mini-ph">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                  </svg>
+                </div>
+                {% endif %}
+              </div>
+
+              {# Online dot #}
+              <div class="online-dot {% if cr.online %}on{% else %}off{% endif %}"></div>
+
+              {# Name + code #}
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-semibold text-truncate small">{{ cr.cam.name }}</div>
+                <div class="text-muted" style="font-size:.68rem">
+                  <code>{{ cr.cam.code }}</code>
+                  {% if cr.last_taken_at %}
+                  · {{ cr.last_taken_at|date:"d/m H:i" }}
+                  {% endif %}
+                </div>
+              </div>
+
+              {# Battery #}
+              {% if cr.battery is not None %}
+              <div class="text-end d-none d-sm-block" style="min-width:60px">
+                <div class="text-muted" style="font-size:.65rem">🔋 {{ cr.battery }}%</div>
+                <div class="bat-bar mt-1">
+                  <div class="bat-fill {% if cr.battery >= 60 %}high{% elif cr.battery >= 30 %}mid{% else %}low{% endif %}"
+                       style="width:{{ cr.battery }}%"></div>
+                </div>
+              </div>
+              {% endif %}
+
+              {# Signal #}
+              {% if cr.signal is not None %}
+              <div class="text-muted d-none d-md-block" style="font-size:.65rem; min-width:50px">
+                📶 {{ cr.signal }} dBm
+              </div>
+              {% endif %}
+
+              {# Actions #}
+              <div class="d-flex gap-1">
+                <a href="{% url 'media_gallery' cr.cam.pk %}" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.7rem">
+                  {% trans "Photos" %}
+                </a>
+              </div>
+            </div>
+            {% empty %}
+            <div class="text-muted small p-3">{% trans "No cameras in this site." %}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# ── Camera không có site ── #}
+  {% if no_site_list %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2 px-3">
+      <span class="fw-semibold text-muted small">📷 {% trans "No site assigned" %}</span>
+    </div>
+    <div class="card-body p-0">
+      {% for cr in no_site_list %}
+      <div class="cam-row px-3">
+        <div class="cam-mini">
+          {% if cr.thumb_url %}
+          <img src="{{ cr.thumb_url }}" alt="{{ cr.cam.code }}" loading="lazy">
+          {% else %}
+          <div class="cam-mini-ph">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          {% endif %}
+        </div>
+        <div class="online-dot {% if cr.online %}on{% else %}off{% endif %}"></div>
+        <div class="flex-grow-1 min-w-0">
+          <div class="fw-semibold text-truncate small">{{ cr.cam.name }}</div>
+          <div class="text-muted" style="font-size:.68rem">
+            <code>{{ cr.cam.code }}</code>
+            {% if cr.last_taken_at %} · {{ cr.last_taken_at|date:"d/m H:i" }}{% endif %}
+          </div>
+        </div>
+        {% if cr.battery is not None %}
+        <div class="text-end d-none d-sm-block" style="min-width:60px">
+          <div class="text-muted" style="font-size:.65rem">🔋 {{ cr.battery }}%</div>
+          <div class="bat-bar mt-1">
+            <div class="bat-fill {% if cr.battery >= 60 %}high{% elif cr.battery >= 30 %}mid{% else %}low{% endif %}"
+                 style="width:{{ cr.battery }}%"></div>
+          </div>
+        </div>
+        {% endif %}
+        <a href="{% url 'media_gallery' cr.cam.pk %}" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.7rem">
+          {% trans "Photos" %}
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

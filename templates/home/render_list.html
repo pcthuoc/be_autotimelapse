@@ -1,0 +1,454 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Video Render — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="mb-0 fw-bold">
+      <svg class="icon icon-sm me-2 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+      </svg>
+      Danh sách Video Render
+    </h4>
+    <p class="text-muted small mt-1 mb-0">Tất cả các job render timelapse đã thực hiện</p>
+  </div>
+  {% if has_active_render %}
+  <button class="btn btn-primary d-inline-flex align-items-center gap-2" id="btnCreateRender" disabled
+          title="Đang có render đang chạy...">
+    <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    <span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem;"></span>
+    Đang render...
+  </button>
+  {% else %}
+  <button class="btn btn-primary d-inline-flex align-items-center gap-2" id="btnCreateRender"
+          data-bs-toggle="modal" data-bs-target="#createRenderModal">
+    <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Tạo Render mới
+  </button>
+  {% endif %}
+</div>
+
+{% if render_rows %}
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Camera</th>
+          <th>Khoảng thời gian</th>
+          <th>Tùy chọn</th>
+          <th>Frames</th>
+          <th>Kích thước</th>
+          <th>Trạng thái</th>
+          <th>Người tạo</th>
+          <th>Ngày tạo</th>
+          <th class="text-center">Tải về</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in render_rows %}
+        {% with vr=row.vr %}
+        <tr id="render-row-{{ vr.pk }}">
+          <td>
+            <a href="{% url 'media_gallery' vr.camera.pk %}" class="fw-semibold text-decoration-none">
+              {{ vr.camera.name }}
+            </a>
+            {% if vr.camera.site %}
+            <div class="small text-muted">{{ vr.camera.site.name }}</div>
+            {% endif %}
+          </td>
+          <td class="small">
+            <span class="text-nowrap">{{ vr.date_from|date:"d/m/Y" }}</span>
+            <span class="text-muted mx-1">→</span>
+            <span class="text-nowrap">{{ vr.date_to|date:"d/m/Y" }}</span>
+          </td>
+          <td class="small text-muted text-nowrap">{{ vr.fps }}fps · {{ vr.resolution }}</td>
+          <td class="small">{{ vr.item_count|default:"—" }}</td>
+          <td class="small text-nowrap">
+            {% if vr.size_bytes %}{{ vr.size_bytes|filesizeformat }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if vr.status == 'ready' %}
+            <span class="badge bg-success rounded-pill">
+              <svg class="icon icon-xxs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              Sẵn sàng
+            </span>
+            {% elif vr.status == 'processing' %}
+            <span class="badge bg-warning text-dark rounded-pill render-status-badge" data-id="{{ vr.pk }}">
+              <span class="spinner-border" style="width:.5rem;height:.5rem;border-width:2px;vertical-align:middle;"></span>
+              Đang render {{ vr.progress }}%
+            </span>
+            {% elif vr.status == 'pending' %}
+            <span class="badge bg-secondary rounded-pill render-status-badge" data-id="{{ vr.pk }}">
+              <svg class="icon icon-xxs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Chờ xử lý
+            </span>
+            {% else %}
+            <span class="badge bg-danger rounded-pill" title="{{ vr.error }}">
+              <svg class="icon icon-xxs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              Lỗi
+            </span>
+            {% endif %}
+          </td>
+          <td class="small text-muted">{{ vr.requested_by.username }}</td>
+          <td class="small text-nowrap text-muted">{{ vr.created_at|date:"H:i d/m/Y" }}</td>
+          <td class="text-center">
+            {% if vr.status == 'ready' %}
+            <a href="{% url 'render_download' vr.pk %}" class="btn btn-sm btn-success d-inline-flex align-items-center gap-1">
+              <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Tải MP4
+            </a>
+            {% elif vr.status == 'processing' or vr.status == 'pending' %}
+            <button class="btn btn-sm btn-outline-secondary" disabled>
+              <span class="spinner-border spinner-border-sm"></span>
+            </button>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if vr.status == 'processing' or vr.status == 'pending' %}
+            <button class="btn btn-sm btn-outline-secondary" disabled title="Đang xử lý, không thể xóa">
+              <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            </button>
+            {% else %}
+            <button class="btn btn-sm btn-outline-danger" title="Xoá"
+              onclick="deleteRender('{{ vr.pk }}')">
+              <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <svg class="icon mb-3" style="width:3rem;height:3rem;opacity:.25;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+  </svg>
+  <p class="mb-2">Chưa có video render nào.</p>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createRenderModal">
+    <svg class="icon icon-xs me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    Tạo render đầu tiên
+  </button>
+</div>
+{% endif %}
+
+{# ── Modal Tạo Render mới ────────────────────────────────────────────────────── #}
+<div class="modal fade" id="createRenderModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white py-3">
+        <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+          <svg class="icon icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Tạo Video Timelapse
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form id="createRenderForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div id="createRenderError" class="alert alert-danger d-none mb-3 small"></div>
+
+          {# ── 1. Chọn Camera ── #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
+              📷 Camera
+            </label>
+            <select name="camera_pk" id="rmCamera" class="form-select" required>
+              <option value="">— Chọn camera —</option>
+              {% for cam in cameras %}
+              <option value="{{ cam.pk }}">{{ cam.name }}{% if cam.site %} · <span class="text-muted">{{ cam.site.name }}</span>{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {# ── 2. Khoảng thời gian ── #}
+          <div class="card border bg-light mb-3">
+            <div class="card-body py-2 px-3">
+              <p class="fw-semibold small text-uppercase text-muted mb-2">📅 Khoảng thời gian</p>
+              <div class="row g-2">
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Từ ngày giờ <span class="text-danger">*</span></label>
+                  <input type="datetime-local" id="rmFrom" name="date_from_dt" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Đến ngày giờ <span class="text-danger">*</span></label>
+                  <input type="datetime-local" id="rmTo" name="date_to_dt" class="form-control form-control-sm" required>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ── 3. Tần suất lấy ảnh ── #}
+          <div class="card border bg-light mb-3">
+            <div class="card-body py-2 px-3">
+              <p class="fw-semibold small text-uppercase text-muted mb-2">⏱️ Tần suất lấy ảnh</p>
+              <select name="frame_interval" id="rmInterval" class="form-select form-select-sm" onchange="updatePreview()">
+                <option value="0">Lấy tất cả ảnh</option>
+                <option value="30">1 ảnh / 30 giây</option>
+                <option value="60" selected>1 ảnh / 1 phút</option>
+                <option value="120">1 ảnh / 2 phút</option>
+                <option value="300">1 ảnh / 5 phút</option>
+                <option value="600">1 ảnh / 10 phút</option>
+                <option value="1800">1 ảnh / 30 phút</option>
+                <option value="3600">1 ảnh / 1 giờ</option>
+              </select>
+              <div class="form-text mt-1">Camera chụp càng dày → chọn tần suất thưa hơn để tránh video quá dài</div>
+            </div>
+          </div>
+
+          {# ── 4. Tùy chọn video ── #}
+          <div class="card border bg-light mb-3">
+            <div class="card-body py-2 px-3">
+              <p class="fw-semibold small text-uppercase text-muted mb-2">🎬 Tùy chọn video</p>
+              <div class="row g-2">
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">FPS (tốc độ khung)</label>
+                  <select name="fps" id="rmFps" class="form-select form-select-sm" onchange="updatePreview()">
+                    <option value="6">6 fps — rất chậm</option>
+                    <option value="12">12 fps — chậm</option>
+                    <option value="24" selected>24 fps — chuẩn</option>
+                    <option value="30">30 fps — mượt</option>
+                  </select>
+                  <div class="form-text">FPS thấp → video ngắn hơn</div>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Độ phân giải</label>
+                  <select name="resolution" id="rmRes" class="form-select form-select-sm">
+                    {% for val, label in resolution_choices %}
+                    <option value="{{ val }}" {% if val == '1920x1080' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">Full HD = cân bằng tốt</div>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Chất lượng (CRF)</label>
+                  <select name="quality_preset" id="rmQuality" class="form-select form-select-sm">
+                    <option value="fast_18">Cao (file lớn)</option>
+                    <option value="fast_23" selected>Chuẩn</option>
+                    <option value="fast_28">Nhỏ (file gọn)</option>
+                  </select>
+                  <div class="form-text">Ảnh hưởng kích thước file</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ── Preview ước tính ── #}
+          <div class="alert alert-primary border-0 mb-0 py-2 px-3 small" id="renderPreview">
+            <div class="d-flex align-items-center gap-2">
+              <svg class="icon icon-xs flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span id="previewText">Chọn thời gian và tần suất để xem ước tính.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Huỷ</button>
+          <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2"
+                  id="createRenderSubmitBtn" onclick="submitCreateRender()">
+            <svg class="icon icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Bắt đầu Render
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+var CSRF = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+// ── Xoá render ────────────────────────────────────────────────────────────────
+async function deleteRender(pk) {
+  var result = await Swal.fire({
+    title: 'Xoá render này?',
+    text: 'File video (nếu đã render xong) cũng sẽ bị xoá.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'Xoá',
+    cancelButtonText: 'Huỷ',
+  });
+  if (!result.isConfirmed) return;
+  try {
+    var res = await fetch('/renders/' + pk + '/delete/', {
+      method: 'POST',
+      headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
+    });
+    var json = await res.json();
+    if (json.ok) {
+      document.getElementById('render-row-' + pk)?.remove();
+      Swal.fire({ icon: 'success', title: 'Đã xoá!', timer: 1200, showConfirmButton: false });
+    } else {
+      Swal.fire({ icon: 'error', title: 'Lỗi', text: json.error });
+    }
+  } catch(e) {
+    Swal.fire({ icon: 'error', title: 'Lỗi kết nối', text: e.message });
+  }
+}
+
+// ── Auto-poll badges ──────────────────────────────────────────────────────────
+document.querySelectorAll('.render-status-badge[data-id]').forEach(function(b) {
+  pollRenderRow(b.dataset.id);
+});
+function pollRenderRow(id) {
+  var iv = setInterval(async function() {
+    try {
+      var r    = await fetch('/renders/' + id + '/status/');
+      var data = await r.json();
+      var badge = document.querySelector('.render-status-badge[data-id="' + id + '"]');
+      if (!badge) { clearInterval(iv); return; }
+      if (data.status === 'processing') {
+        badge.innerHTML = '<span class="spinner-border" style="width:.5rem;height:.5rem;border-width:2px;vertical-align:middle;"></span> Đang render ' + data.progress + '%';
+      } else if (data.status === 'ready' || data.status === 'failed') {
+        clearInterval(iv); location.reload();
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+// ── Preview ước tính độ dài video ─────────────────────────────────────────────
+function updatePreview() {
+  var dtFrom   = document.getElementById('rmFrom')?.value;
+  var dtTo     = document.getElementById('rmTo')?.value;
+  var interval = parseInt(document.getElementById('rmInterval')?.value || 0);
+  var fps      = parseInt(document.getElementById('rmFps')?.value || 24);
+  var el       = document.getElementById('previewText');
+  if (!el) return;
+
+  if (!dtFrom || !dtTo) {
+    el.textContent = 'Chọn thời gian và tần suất để xem ước tính.';
+    return;
+  }
+
+  var secTotal = (new Date(dtTo) - new Date(dtFrom)) / 1000;
+  if (secTotal <= 0) { el.textContent = 'Ngày "Đến" phải sau ngày "Từ".'; return; }
+
+  var estFrames;
+  if (interval <= 0) {
+    el.textContent = 'Lấy tất cả ảnh trong khoảng — số frame thực tế tùy camera.';
+    return;
+  } else {
+    estFrames = Math.floor(secTotal / interval) + 1;
+  }
+
+  var vidSec   = estFrames / fps;
+  var vidMin   = Math.floor(vidSec / 60);
+  var vidRemSec = Math.round(vidSec % 60);
+  var durStr   = vidMin > 0 ? vidMin + ' phút ' + vidRemSec + ' giây' : vidRemSec + ' giây';
+
+  el.innerHTML = '≈ <strong>' + estFrames.toLocaleString() + ' frames</strong>'
+    + ' → video ~<strong>' + durStr + '</strong>'
+    + ' (' + fps + ' fps)'
+    + ' <span class="opacity-75">· 1 ảnh/' + (interval < 60 ? interval + 'giây' : (interval/60) + 'phút') + '</span>';
+}
+
+// Gắn event listeners
+document.getElementById('rmFrom')?.addEventListener('change', updatePreview);
+document.getElementById('rmTo')?.addEventListener('change', updatePreview);
+
+// ── Submit tạo render ─────────────────────────────────────────────────────────
+async function submitCreateRender() {
+  var form   = document.getElementById('createRenderForm');
+  var errDiv = document.getElementById('createRenderError');
+  var btn    = document.getElementById('createRenderSubmitBtn');
+  errDiv.classList.add('d-none');
+
+  var cameraPk = document.getElementById('rmCamera').value;
+  var dtFrom   = document.getElementById('rmFrom').value;
+  var dtTo     = document.getElementById('rmTo').value;
+  var fps      = form.querySelector('[name=fps]').value;
+  var res      = form.querySelector('[name=resolution]').value;
+  var interval = form.querySelector('[name=frame_interval]').value;
+  var camName  = document.getElementById('rmCamera').selectedOptions[0]?.text || '';
+  var intervalLabel = document.getElementById('rmInterval').selectedOptions[0]?.text || '';
+
+  if (!cameraPk) { errDiv.textContent = 'Vui lòng chọn camera.'; errDiv.classList.remove('d-none'); return; }
+  if (!dtFrom || !dtTo) { errDiv.textContent = 'Vui lòng chọn khoảng ngày giờ.'; errDiv.classList.remove('d-none'); return; }
+  if (dtFrom >= dtTo) { errDiv.textContent = 'Ngày "Đến" phải sau ngày "Từ".'; errDiv.classList.remove('d-none'); return; }
+
+  var previewEl = document.getElementById('previewText');
+  var preview   = previewEl ? previewEl.textContent : '';
+
+  var result = await Swal.fire({
+    title: 'Xác nhận tạo render?',
+    html: `<div class="text-start small">
+      <div class="mb-1"><b>Camera:</b> ${camName}</div>
+      <div class="mb-1"><b>Từ:</b> ${dtFrom.replace('T',' ')}</div>
+      <div class="mb-1"><b>Đến:</b> ${dtTo.replace('T',' ')}</div>
+      <div class="mb-1"><b>Tần suất:</b> ${intervalLabel}</div>
+      <div class="mb-1"><b>Tùy chọn:</b> ${fps} fps · ${res}</div>
+      <div class="text-muted">${preview}</div>
+    </div>`,
+    icon: 'question', showCancelButton: true,
+    confirmButtonText: '🚀 Render', cancelButtonText: 'Huỷ',
+    confirmButtonColor: '#0d6efd',
+  });
+  if (!result.isConfirmed) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tạo...';
+
+  try {
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', CSRF);
+    fd.append('date_from',      dtFrom.split('T')[0]);
+    fd.append('date_to',        dtTo.split('T')[0]);
+    fd.append('fps',             fps);
+    fd.append('resolution',      res);
+    fd.append('frame_interval',  interval);
+
+    var res2 = await fetch('/cameras/' + cameraPk + '/render/', {
+      method: 'POST',
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+      body: fd,
+    });
+    var json = await res2.json();
+
+    if (json.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('createRenderModal'))?.hide();
+      Swal.fire({
+        icon: 'success', title: 'Đã tạo job render!',
+        html: 'Video đang xử lý nền.<br><small class="text-muted">Khi xong sẽ có thông báo tại nút <b>Thông báo</b> góc phải.</small>',
+        timer: 3000, showConfirmButton: false,
+      }).then(() => location.reload());
+    } else {
+      errDiv.textContent = json.error || 'Lỗi không xác định.';
+      errDiv.classList.remove('d-none');
+    }
+  } catch(e) {
+    errDiv.textContent = 'Lỗi kết nối: ' + e.message;
+    errDiv.classList.remove('d-none');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '▶ Bắt đầu Render';
+  }
+}
+</script>
+{% endblock javascripts %}

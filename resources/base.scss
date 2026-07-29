@@ -1,0 +1,31 @@
+// base.scss — reset + global element styles
+@import "vars";
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: $body_fonts;
+    font-size:   $font_size_base;
+    line-height: $line_height_base;
+    color:       $color_body_text;
+    background:  $color_bg_body;
+    margin:      0;
+}
+
+a {
+    color: $color_primary;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: $color_header_text;
+    font-weight: 600;
+}

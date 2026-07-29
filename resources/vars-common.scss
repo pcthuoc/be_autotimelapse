@@ -1,0 +1,35 @@
+// ============================================================
+// vars-common.scss — biến dùng chung (màu thương hiệu, font, radius)
+// ============================================================
+
+// Brand colors
+$color_primary:       #7928CA;
+$color_primary5:      rgba(121, 40, 202, 0.05);
+$color_primary25:     rgba(121, 40, 202, 0.25);
+$color_secondary:     #FF0080;
+$color_success:       #82D616;
+$color_warning:       #FBCF33;
+$color_danger:        #EA0606;
+$color_info:          #17C1E8;
+
+// Text
+$color_header_text:   #344767;
+$color_body_text:     #67748E;
+$color_muted:         #8392AB;
+
+// Backgrounds
+$color_bg_light:      #F8F9FA;
+$color_bg_card:       #FFFFFF;
+$color_border:        #DEE2E6;
+
+// Typography
+$body_fonts:          "Open Sans", "Helvetica Neue", Arial, sans-serif;
+$mono_fonts:          "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+$font_size_base:      0.875rem;   // 14px
+$font_size_sm:        0.75rem;    // 12px
+$line_height_base:    1.5;
+
+// Radius / shadow
+$widget_border_radius: 0.75rem;
+$card_border_radius:   1rem;
+$btn_border_radius:    0.5rem;

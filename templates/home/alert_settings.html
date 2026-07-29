@@ -1,0 +1,95 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+
+{% block title %}Cài đặt cảnh báo — AutoTimelapse{% endblock %}
+
+{% block content %}
+<div class="py-3 px-1">
+
+  <h4 class="fw-bold mb-1">🔔 Cài đặt cảnh báo</h4>
+  <p class="text-muted small mb-4">Cấu hình ngưỡng thông báo cho từng camera.</p>
+
+  {% if not cam_data %}
+  <div class="card p-4 text-center text-muted">Không có camera nào để cấu hình.</div>
+  {% endif %}
+
+  {% for row in cam_data %}
+  {% with cam=row.camera alert=row.alert %}
+  <div class="card mb-3">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <span class="fw-bold">{{ cam.name }}</span>
+        <code class="small text-muted">{{ cam.code }}</code>
+        {% if cam.site %}<span class="badge bg-light text-dark">{{ cam.site.name }}</span>{% endif %}
+      </div>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input alert-toggle" type="checkbox"
+               data-camera="{{ cam.pk }}" {% if alert.enabled %}checked{% endif %}>
+        <label class="form-check-label small">Bật</label>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'alert_settings_save' camera_pk=cam.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="enabled" value="{% if alert.enabled %}1{% else %}0{% endif %}" class="enabled-val">
+        <div class="row g-3">
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">🔋 Pin yếu (%)</label>
+            <input type="number" name="battery_low_pct" class="form-control form-control-sm"
+                   value="{{ alert.battery_low_pct }}" min="1" max="100">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">🔋 Pin nguy hiểm (%)</label>
+            <input type="number" name="battery_critical_pct" class="form-control form-control-sm"
+                   value="{{ alert.battery_critical_pct }}" min="1" max="100">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">📶 Tín hiệu yếu (dBm)</label>
+            <input type="number" name="signal_weak_dbm" class="form-control form-control-sm"
+                   value="{{ alert.signal_weak_dbm }}" min="-120" max="0">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">⏱️ Offline sau (phút)</label>
+            <input type="number" name="offline_minutes" class="form-control form-control-sm"
+                   value="{{ alert.offline_minutes }}" min="1">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">🌡️ Nhiệt độ cao (°C)</label>
+            <input type="number" name="temperature_high_c" class="form-control form-control-sm"
+                   value="{{ alert.temperature_high_c }}">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-semibold">📸 Ảnh tối thiểu/ngày</label>
+            <input type="number" name="daily_photo_min" class="form-control form-control-sm"
+                   value="{{ alert.daily_photo_min }}" min="0">
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small fw-semibold">✉️ Email nhận cảnh báo</label>
+            <input type="email" name="notify_email" class="form-control form-control-sm"
+                   value="{{ alert.notify_email }}" placeholder="email@example.com">
+          </div>
+        </div>
+        <div class="mt-3 text-end">
+          <button type="submit" class="btn btn-sm btn-primary">💾 Lưu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
+
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+// Toggle enabled/disabled state via checkbox
+document.querySelectorAll('.alert-toggle').forEach(function(cb) {
+  cb.addEventListener('change', function() {
+    const card = cb.closest('.card');
+    const hiddenInput = card.querySelector('.enabled-val');
+    if (hiddenInput) hiddenInput.value = cb.checked ? '1' : '0';
+  });
+});
+</script>
+{% endblock %}

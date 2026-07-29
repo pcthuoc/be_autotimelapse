@@ -1,0 +1,62 @@
+"""
+File mẫu local_settings.py.example.
+Sao chép thành local_settings.py rồi điều chỉnh theo nhu cầu local dev. KHÔNG commit file local_settings.py.
+"""
+
+import os
+from pathlib import Path
+
+# Thử load .env nếu python-dotenv khả dụng
+try:
+    from dotenv import load_dotenv
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    env_site = base_dir / 'environment' / 'site.env'
+    if env_site.exists():
+        load_dotenv(env_site)
+except ImportError:
+    pass
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "thay-bang-gia-tri-ngau-nhien-50-ky-tu")
+DEBUG = os.environ.get("DEBUG", "1") == "1"
+
+ALLOWED_HOSTS = ["cloud.congnghetimelapse.com", "localhost", "127.0.0.1"]
+CSRF_TRUSTED_ORIGINS = ["https://cloud.congnghetimelapse.com", "http://cloud.congnghetimelapse.com"]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "autotimelapse"),
+        "USER": os.environ.get("DB_USER", "atl_user"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "atl_pass_2026"),
+        "HOST": os.environ.get("DB_HOST", "postgres"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+    }
+}
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{REDIS_URL}/1",
+    }
+}
+
+CELERY_BROKER_URL = f"{REDIS_URL}/0"
+CELERY_RESULT_BACKEND = f"{REDIS_URL}/2"
+
+MQTT_BROKER = os.environ.get("MQTT_BROKER", "mosquitto")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USER = os.environ.get("MQTT_USER", "admin")
+MQTT_PASS = os.environ.get("MQTT_PASS", "Admin@Mqtt2026")
+
+SEAWEED = {
+    "ENDPOINT_URL": os.environ.get("SEAWEED_ENDPOINT_URL", "http://localhost:8333"),
+    "PUBLIC_ENDPOINT_URL": os.environ.get("SEAWEED_PUBLIC_ENDPOINT_URL", "http://cloud.congnghetimelapse.com:8333"),
+    "ACCESS_KEY": os.environ.get("SEAWEED_ACCESS_KEY", "api-tl-key"),
+    "SECRET_KEY": os.environ.get("SEAWEED_SECRET_KEY", "ApiTL2026SecretXyz"),
+    "BUCKET": os.environ.get("SEAWEED_BUCKET", "media"),
+    "REGION": "us-east-1",
+    "PRESIGN_EXPIRE": 3600,
+    "ADDRESSING_STYLE": "path",
+}
