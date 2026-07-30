@@ -22,7 +22,6 @@ from django.urls import path, re_path, include
 from core.views.auth import login_view, register_user
 from core.views.camera import (
     camera_add, camera_delete, camera_detail, camera_edit, camera_list, site_add,
-    camera_access, camera_access_partial, access_add, access_edit, access_remove,
     camera_live, camera_live_latest, camera_live_settings,
     camera_device_modal, camera_device_settings, camera_device_wake,
     camera_device_sim, camera_settings_save, camera_settings_pull,
@@ -61,11 +60,6 @@ urlpatterns = [
     path('cameras/<uuid:pk>/', camera_detail, name='camera_detail'),
     path('cameras/<uuid:pk>/edit/', camera_edit, name='camera_edit'),
     path('cameras/<uuid:pk>/delete/', camera_delete, name='camera_delete'),
-    path('cameras/<uuid:pk>/access/', camera_access, name='camera_access'),
-    path('cameras/<uuid:pk>/access/partial/', camera_access_partial, name='camera_access_partial'),
-    path('cameras/<uuid:pk>/access/add/', access_add, name='access_add'),
-    path('access/<uuid:access_pk>/edit/', access_edit, name='access_edit'),
-    path('access/<uuid:access_pk>/remove/', access_remove, name='access_remove'),
     path('sites/add/', site_add, name='site_add'),
     # live view
     path('cameras/<uuid:pk>/live/', camera_live, name='camera_live'),
