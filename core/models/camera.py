@@ -338,6 +338,35 @@ class CameraDevice(models.Model):
     )
     firmware_version = models.CharField(max_length=32, blank=True)
 
+    # ── Kiến trúc 2 Lõi (ESP32-S3 Always-On & CM4 Compute Node) ─────
+    esp32_last_seen_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Lần cuối ESP32-S3 Always-On check-in (xác định Online/Offline trạm).",
+    )
+    esp32_firmware = models.CharField(max_length=32, blank=True)
+
+    class CM4State(models.TextChoices):
+        OFF = "off", "OFF (Đang ngủ)"
+        POWERING_ON = "powering_on", "Đang khởi động"
+        RUNNING = "running", "Hoạt động"
+        SHUTTING_DOWN = "shutting_down", "Đang tắt nguồn"
+
+    cm4_power_state = models.CharField(
+        max_length=20,
+        choices=CM4State.choices,
+        default=CM4State.OFF,
+        db_index=True,
+    )
+    cm4_last_seen_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Lần cuối CM4 gửi Telemetry / thực thi nhiệm vụ.",
+    )
+    sim_active_node = models.CharField(
+        max_length=16,
+        default="esp32",
+        help_text="Nút đang giữ module SIM (esp32 via UART / cm4 via USB).",
+    )
+
     # ── Mốc thời gian ────────────────────────────────────────────────
     last_seen_at = models.DateTimeField(
         null=True, blank=True,

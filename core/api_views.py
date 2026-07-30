@@ -80,6 +80,11 @@ def device_to_dict(dev):
     return {
         'id': str(dev.id),
         'last_seen_at': dev.last_seen_at.isoformat() if dev.last_seen_at else None,
+        'esp32_last_seen_at': dev.esp32_last_seen_at.isoformat() if getattr(dev, 'esp32_last_seen_at', None) else None,
+        'esp32_firmware': getattr(dev, 'esp32_firmware', '') or '',
+        'cm4_power_state': getattr(dev, 'cm4_power_state', 'off') or 'off',
+        'cm4_last_seen_at': dev.cm4_last_seen_at.isoformat() if getattr(dev, 'cm4_last_seen_at', None) else None,
+        'sim_active_node': getattr(dev, 'sim_active_node', 'esp32') or 'esp32',
         'battery_percent': dev.battery_percent,
         'battery_voltage': float(dev.battery_voltage) if dev.battery_voltage else None,
         'is_charging': dev.is_charging,
@@ -100,9 +105,13 @@ def device_to_dict(dev):
 
 
 def is_online(device):
-    if not device or not device.last_seen_at:
+    if not device:
         return False
-    delta = timezone.now() - device.last_seen_at
+    # Online status follows ESP32-S3 (or last_seen_at fallback)
+    last_seen = getattr(device, 'esp32_last_seen_at', None) or device.last_seen_at
+    if not last_seen:
+        return False
+    delta = timezone.now() - last_seen
     return delta.total_seconds() < 300  # 5 min
 
 
@@ -699,6 +708,28 @@ def api_camera_simconfig(request, pk):
         'MQTT_PORT':     1883,
         'SERVER_BASE':   server_base,
     })
+
+
+@api_view(['POST'])
+def api_camera_power_on_cm4(request, pk):
+    """Gửi lệnh MQTT 'power_on_cm4' tới ESP32-S3 để bật nguồn CM4."""
+    try:
+        cam = Camera.objects.get(pk=pk)
+    except Camera.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    from mqtt_service import publisher
+    try:
+        publisher.publish_cmd(cam.code, "power_on_cm4", {})
+        dev, _ = CameraDevice.objects.get_or_create(camera=cam)
+        dev.cm4_power_state = "powering_on"
+        dev.save(update_fields=["cm4_power_state", "updated_at"])
+        return Response({"ok": True, "cm4_power_state": "powering_on"})
+    except Exception as exc:
+        return Response({"detail": f"Không thể gửi lệnh bật CM4: {exc}"}, status=500)
 
 
 

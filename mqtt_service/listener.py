@@ -41,7 +41,7 @@ def _get_device(code):
 # ── handlers ─────────────────────────────────────────────────────────────────
 
 def _handle_data(code, payload):
-    """Telemetry: pin / solar / nhiệt ẩm / sóng SIM."""
+    """Telemetry: pin / solar / nhiệt ẩm / sóng SIM (đo đạc bởi CM4) & trạng thái nguồn 2 lõi."""
     camera, device = _get_device(code)
     if not device:
         return
@@ -68,8 +68,30 @@ def _handle_data(code, payload):
     if payload.get("firmware_version"):
         device.firmware_version = str(payload["firmware_version"])[:32]
         fields.append("firmware_version")
-    device.last_seen_at = timezone.now()
-    fields += ["last_seen_at", "updated_at"]
+
+    node = payload.get("node", "esp32")
+    now = timezone.now()
+    device.last_seen_at = now
+    fields.append("last_seen_at")
+
+    if node == "cm4":
+        device.cm4_last_seen_at = now
+        fields.append("cm4_last_seen_at")
+        device.cm4_power_state = payload.get("cm4_power_state", "running")
+        fields.append("cm4_power_state")
+    else:
+        device.esp32_last_seen_at = now
+        fields.append("esp32_last_seen_at")
+
+    if payload.get("cm4_power_state"):
+        device.cm4_power_state = payload["cm4_power_state"]
+        fields.append("cm4_power_state")
+
+    if payload.get("sim_active_node"):
+        device.sim_active_node = payload["sim_active_node"]
+        fields.append("sim_active_node")
+
+    fields.append("updated_at")
     device.save(update_fields=fields)
     cache.set(f"cam:online:{code}", True, ONLINE_TTL)
     cache.set(f"cam:telemetry:{code}", payload, ONLINE_TTL)
