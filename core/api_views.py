@@ -50,6 +50,7 @@ def camera_to_dict(cam, request=None):
         'status': cam.status,
         'camera_model': cam.camera_model or 'generic',
         'timezone': str(cam.timezone),
+        'mqtt_password': cam.mqtt_password,
         'site': {
             'id': str(cam.site.id),
             'name': cam.site.name,
@@ -465,14 +466,15 @@ def api_cameras(request):
         'MQTT_BROKER':   'localhost',
         'MQTT_PORT':     1884,
         'SERVER_BASE':   'http://localhost',
-        'DEVICE_KEY':    cam.code,
-        'DEVICE_SECRET': cam.mqtt_password,
+        'DEVICE_KEY':    cred.key_id,
+        'DEVICE_SECRET': raw_secret,
     }
     resp['mqtt'] = {
         'registered': mqtt_ok,
         'errors': mqtt_errors,
         'note': 'Nếu lỗi MQTT, vào camera modal → nút "Re-register MQTT" để thử lại.',
     }
+
     return Response(resp, status=201)
 
 
@@ -526,7 +528,16 @@ def api_camera_detail(request, pk):
                     if not membership or new_site.client_id != membership.client_id:
                         return Response({'detail': 'Site không thuộc client của bạn'}, status=403)
                 cam.site = new_site
-        for field in ['name', 'status', 'timezone', 'camera_model']:
+        # Validate code uniqueness if changing code
+        if 'code' in request.data and request.data['code'] != cam.code:
+            new_code = str(request.data['code']).strip()
+            if not new_code:
+                return Response({'detail': 'Mã camera không được để trống'}, status=400)
+            if Camera.objects.filter(code=new_code).exclude(pk=cam.pk).exists():
+                return Response({'detail': 'Mã camera đã tồn tại trên hệ thống'}, status=400)
+            cam.code = new_code
+
+        for field in ['name', 'mqtt_password', 'status', 'timezone', 'camera_model']:
             if field in request.data:
                 setattr(cam, field, request.data[field])
         cam.save()
@@ -678,16 +689,20 @@ def api_camera_simconfig(request, pk):
     except Camera.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
 
+    cred = CameraCredential.objects.filter(camera=cam, status='active').order_by('-created_at').first()
+    key_id = cred.key_id if cred else cam.code
+
     return Response({
         'CAMERA_CODE':   cam.code,
         'MQTT_PASSWORD': cam.mqtt_password,
         'MQTT_BROKER':   'localhost',
         'MQTT_PORT':     1884,
         'SERVER_BASE':   'http://localhost',
-        'DEVICE_KEY':    cam.code,
-        'DEVICE_SECRET': cam.mqtt_password,
-        'note': 'DEVICE_KEY = CAMERA_CODE, DEVICE_SECRET = MQTT_PASSWORD — không hết hạn.',
+        'DEVICE_KEY':    key_id,
+        'DEVICE_SECRET': '<raw_secret_chi_xuat_hien_1_lan_khi_tao_camera_hoac_tao_credential>',
+        'note': 'DEVICE_KEY là Key ID của Credential. DEVICE_SECRET chỉ hiển thị 1 lần khi tạo mới.',
     })
+
 
 
 @api_view(['GET', 'POST'])
