@@ -17,8 +17,6 @@ urlpatterns = [
     path('cameras/<uuid:pk>/device/',            api_views.api_camera_device),
     path('cameras/<uuid:pk>/device/update/',     api_views.api_camera_device_update),
     path('cameras/<uuid:pk>/camera-settings/',   api_views.api_camera_settings),
-    path('cameras/<uuid:pk>/access/',            api_views.api_camera_access),
-    path('cameras/<uuid:pk>/access/<uuid:acc_pk>/', api_views.api_camera_access_detail),
     path('cameras/<uuid:pk>/credentials/',       api_views.api_camera_credentials),
     path('cameras/<uuid:pk>/simconfig/',         api_views.api_camera_simconfig),
     path('cameras/<uuid:pk>/mqtt-register/',     api_views.api_camera_mqtt_register),
