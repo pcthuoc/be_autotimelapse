@@ -458,15 +458,16 @@ def api_cameras(request):
     except Exception as exc:
         mqtt_errors = [str(exc)]
 
+    broker_host = request.META.get('HTTP_HOST', 'localhost').split(':')[0] if request else 'localhost'
+    server_base = request.build_absolute_uri('/').rstrip('/') if request else 'http://localhost'
+
     resp = camera_to_dict(cam, request)
     resp['simconfig'] = {
         'CAMERA_CODE':   cam.code,
         'MQTT_PASSWORD': cam.mqtt_password,
-        'MQTT_BROKER':   'localhost',
-        'MQTT_PORT':     1884,
-        'SERVER_BASE':   'http://localhost',
-        'DEVICE_KEY':    cred.key_id,
-        'DEVICE_SECRET': raw_secret,
+        'MQTT_BROKER':   broker_host,
+        'MQTT_PORT':     1883,
+        'SERVER_BASE':   server_base,
     }
     resp['mqtt'] = {
         'registered': mqtt_ok,
@@ -688,18 +689,15 @@ def api_camera_simconfig(request, pk):
     except Camera.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
 
-    cred = CameraCredential.objects.filter(camera=cam, status='active').order_by('-created_at').first()
-    key_id = cred.key_id if cred else cam.code
+    host = request.META.get('HTTP_HOST', 'localhost').split(':')[0] if request else 'localhost'
+    server_base = request.build_absolute_uri('/').rstrip('/') if request else 'http://localhost'
 
     return Response({
         'CAMERA_CODE':   cam.code,
         'MQTT_PASSWORD': cam.mqtt_password,
-        'MQTT_BROKER':   'localhost',
-        'MQTT_PORT':     1884,
-        'SERVER_BASE':   'http://localhost',
-        'DEVICE_KEY':    key_id,
-        'DEVICE_SECRET': '<raw_secret_chi_xuat_hien_1_lan_khi_tao_camera_hoac_tao_credential>',
-        'note': 'DEVICE_KEY là Key ID của Credential. DEVICE_SECRET chỉ hiển thị 1 lần khi tạo mới.',
+        'MQTT_BROKER':   host,
+        'MQTT_PORT':     1883,
+        'SERVER_BASE':   server_base,
     })
 
 
