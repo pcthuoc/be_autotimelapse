@@ -259,58 +259,7 @@ class UserEditForm(forms.ModelForm):
         return user
 
 
-# ── Camera access form ────────────────────────────────────────────────────────
 
-from core.models.camera import UserCameraAccess
-
-
-class CameraAccessForm(forms.ModelForm):
-    # Multi-select: chọn nhiều user cùng lúc
-    users = forms.ModelMultipleChoiceField(
-        queryset=User.objects.filter(is_active=True).order_by("username"),
-        label=_("Users"),
-        widget=forms.SelectMultiple(attrs={
-            "class": "form-select",
-            "id": "id_users_select",
-        }),
-    )
-    can_view = forms.BooleanField(
-        required=False, initial=True,
-        label=_("View camera"),
-        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
-    )
-    can_manage = forms.BooleanField(
-        required=False,
-        label=_("Manage camera"),
-        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
-    )
-    can_download = forms.BooleanField(
-        required=False,
-        label=_("Download media"),
-        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
-    )
-    can_delete_media = forms.BooleanField(
-        required=False,
-        label=_("Delete media"),
-        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
-    )
-
-    class Meta:
-        model = UserCameraAccess
-        fields = ("user", "can_view", "can_manage", "can_download", "can_delete_media")
-
-    def clean(self):
-        cleaned = super().clean()
-        # Phải chọn ít nhất can_view
-        if not cleaned.get("can_view") and not any([
-            cleaned.get("can_manage"),
-            cleaned.get("can_download"),
-            cleaned.get("can_delete_media"),
-        ]):
-            raise ValidationError(
-                _("You must grant at least one permission.")
-            )
-        return cleaned
 
 
 # ── Camera device settings form ───────────────────────────────────────────────

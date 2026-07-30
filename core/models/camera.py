@@ -196,9 +196,15 @@ class Camera(models.Model):
         ).exists()
 
     def _has_camera_scope(self, user, field):
-        return UserCameraAccess.objects.filter(
-            user=user, camera=self, **{field: True}
-        ).exists()
+        if not self.site_id or not self.site or not self.site.client_id:
+            return False
+        from core.models.permission import ClientMembership
+        m = ClientMembership.objects.filter(user=user, client_id=self.site.client_id).first()
+        if not m:
+            return False
+        if field == "can_download":
+            return m.can_download
+        return True
 
 
 class CameraCredential(models.Model):
@@ -260,46 +266,7 @@ class CameraCredential(models.Model):
         raise RuntimeError("Could not generate unique credential key_id.")
 
 
-class UserCameraAccess(models.Model):
-    """
-    Scope per-camera: xác định user nào được làm gì trên camera nào.
-    Admin cấp / thu hồi tại bảng này.
-    """
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="camera_accesses",
-    )
-    camera = models.ForeignKey(
-        Camera, on_delete=models.CASCADE, related_name="user_accesses"
-    )
-    can_view = models.BooleanField(default=True)
-    can_manage = models.BooleanField(default=False)
-    can_download = models.BooleanField(default=False)
-    can_delete_media = models.BooleanField(default=False)
-    granted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="granted_accesses",
-    )
-    granted_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ("user", "camera")
-        verbose_name = "Camera access"
-        verbose_name_plural = "Camera accesses"
-
-    def __str__(self):
-        flags = [
-            f for f, v in [
-                ("view", self.can_view), ("manage", self.can_manage),
-                ("download", self.can_download), ("del_media", self.can_delete_media),
-            ] if v
-        ]
-        return f"{self.user} → {self.camera.code} [{', '.join(flags)}]"
 
 
 class CameraDevice(models.Model):

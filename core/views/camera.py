@@ -31,9 +31,13 @@ def _camera_qs(user):
         return Camera.objects.select_related("site", "device").order_by("code")
     if not _has_perm(user, "camera.view"):
         return Camera.objects.none()
+    from core.models.permission import ClientMembership
+    membership = ClientMembership.objects.filter(user=user).first()
+    if not membership:
+        return Camera.objects.none()
     return (
         Camera.objects.select_related("site", "device")
-        .filter(user_accesses__user=user, user_accesses__can_view=True)
+        .filter(site__client=membership.client)
         .order_by("code").distinct()
     )
 
@@ -305,140 +309,7 @@ def site_add(request):
 # ── Camera access management ──────────────────────────────────────────────────
 
 
-from core.forms import CameraAccessForm
-from core.models.camera import UserCameraAccess
 
-
-def _is_ajax(request):
-    return request.headers.get("x-requested-with") == "XMLHttpRequest"
-
-
-def _access_context(camera):
-    from django.contrib.auth import get_user_model
-    accesses = (
-        UserCameraAccess.objects
-        .filter(camera=camera)
-        .select_related("user", "granted_by")
-        .order_by("user__username")
-    )
-    assigned_ids = list(accesses.values_list("user_id", flat=True))
-    _User = get_user_model()
-    unassigned_users = _User.objects.filter(is_active=True).exclude(
-        id__in=assigned_ids
-    ).order_by("username")
-    return {
-        "camera": camera,
-        "accesses": accesses,
-        "unassigned_users": unassigned_users,
-        "add_form": CameraAccessForm(),
-    }
-
-
-def _render_access_partial(request, camera, flash_msg=None, flash_level="success"):
-    ctx = _access_context(camera)
-    ctx["flash_msg"] = flash_msg
-    ctx["flash_level"] = flash_level
-    return render(request, "home/_camera_access_body.html", ctx)
-
-
-@login_required
-def camera_access(request, pk):
-    """Trang quan ly phan quyen camera (full page - fallback)."""
-    if not _has_perm(request.user, "camera.assign"):
-        raise Http404()
-    camera = get_object_or_404(Camera, pk=pk)
-    ctx = _access_context(camera)
-    ctx["segment"] = "cameras"
-    return render(request, "home/camera_access.html", ctx)
-
-
-@login_required
-def camera_access_partial(request, pk):
-    """Tra ve HTML modal-content de nap bang AJAX (khong chuyen trang)."""
-    if not _has_perm(request.user, "camera.assign"):
-        raise Http404()
-    camera = get_object_or_404(Camera, pk=pk)
-    return _render_access_partial(request, camera)
-
-
-@login_required
-def access_add(request, pk):
-    if not _has_perm(request.user, "camera.assign"):
-        raise Http404()
-    camera = get_object_or_404(Camera, pk=pk)
-    flash_msg, flash_level = None, "success"
-    if request.method == "POST":
-        from django.contrib.auth import get_user_model
-        _User = get_user_model()
-        user_pks = request.POST.getlist("users")
-        if not user_pks:
-            flash_msg, flash_level = "Vui long chon it nhat mot nguoi dung.", "warning"
-        else:
-            can_view         = "can_view"         in request.POST
-            can_manage       = "can_manage"       in request.POST
-            can_download     = "can_download"     in request.POST
-            can_delete_media = "can_delete_media" in request.POST
-            valid_users = _User.objects.filter(pk__in=user_pks, is_active=True)
-            created = []
-            for user in valid_users:
-                _, is_new = UserCameraAccess.objects.get_or_create(
-                    user=user, camera=camera,
-                    defaults={
-                        "can_view": can_view, "can_manage": can_manage,
-                        "can_download": can_download,
-                        "can_delete_media": can_delete_media,
-                        "granted_by": request.user,
-                    }
-                )
-                if is_new:
-                    created.append(user.username)
-            if created:
-                flash_msg = "Da cap quyen cho: " + ", ".join(created) + "."
-            else:
-                flash_msg, flash_level = "Nguoi dung da co quyen hoac khong tim thay.", "warning"
-    if _is_ajax(request):
-        return _render_access_partial(request, camera, flash_msg, flash_level)
-    if flash_msg:
-        getattr(messages, flash_level)(request, flash_msg)
-    return redirect("camera_access", pk=pk)
-
-
-@login_required
-def access_edit(request, access_pk):
-    if not _has_perm(request.user, "camera.assign"):
-        raise Http404()
-    access = get_object_or_404(UserCameraAccess, pk=access_pk)
-    flash_msg, flash_level = None, "success"
-    if request.method == "POST":
-        access.can_view         = "can_view"         in request.POST
-        access.can_manage       = "can_manage"       in request.POST
-        access.can_download     = "can_download"     in request.POST
-        access.can_delete_media = "can_delete_media" in request.POST
-        access.save()
-        flash_msg = "Da cap nhat quyen cua " + access.user.username + "."
-    if _is_ajax(request):
-        return _render_access_partial(request, access.camera, flash_msg, flash_level)
-    if flash_msg:
-        getattr(messages, flash_level)(request, flash_msg)
-    return redirect("camera_access", pk=access.camera.pk)
-
-
-@login_required
-def access_remove(request, access_pk):
-    if not _has_perm(request.user, "camera.assign"):
-        raise Http404()
-    access = get_object_or_404(UserCameraAccess, pk=access_pk)
-    camera = access.camera
-    flash_msg, flash_level = None, "success"
-    if request.method == "POST":
-        uname = access.user.username
-        access.delete()
-        flash_msg = "Da thu hoi quyen cua " + uname + "."
-    if _is_ajax(request):
-        return _render_access_partial(request, camera, flash_msg, flash_level)
-    if flash_msg:
-        getattr(messages, flash_level)(request, flash_msg)
-    return redirect("camera_access", pk=camera.pk)
 
 
 # ── Live view ─────────────────────────────────────────────────────────────────

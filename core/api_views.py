@@ -23,7 +23,6 @@ from core.models import (
     Media,
     MediaDayStat,
     Site,
-    UserCameraAccess,
     VideoRender,
 )
 
@@ -858,96 +857,7 @@ def api_sites(request):
 # Camera Access Management
 # ─────────────────────────────────────────────
 
-def _acc_to_dict(acc):
-    return {
-        'id': str(acc.id),
-        'user_id': acc.user.id,
-        'username': acc.user.username,
-        'email': acc.user.email or '',
-        'can_view': acc.can_view,
-        'can_manage': acc.can_manage,
-        'can_download': acc.can_download,
-        'can_delete_media': acc.can_delete_media,
-        'granted_at': acc.granted_at.isoformat(),
-    }
 
-
-@api_view(['GET', 'POST'])
-def api_camera_access(request, pk):
-    try:
-        cam = Camera.objects.get(pk=pk)
-    except Camera.DoesNotExist:
-        return Response({'detail': 'Not found'}, status=404)
-
-    if not cam.is_editable_by(request.user):
-        return Response({'detail': 'Permission denied'}, status=403)
-
-    if request.method == 'GET':
-        accesses = UserCameraAccess.objects.filter(camera=cam).select_related('user').order_by('granted_at')
-        # Users not yet assigned
-        assigned_ids = accesses.values_list('user_id', flat=True)
-        unassigned = User.objects.exclude(id__in=assigned_ids).filter(is_active=True).order_by('username')[:50]
-        return Response({
-            'accesses': [_acc_to_dict(a) for a in accesses],
-            'unassigned_users': [{'id': u.id, 'username': u.username, 'email': u.email or ''} for u in unassigned],
-        })
-
-    # POST: grant access
-    user_id = request.data.get('user_id')
-    if not user_id:
-        return Response({'detail': 'user_id required'}, status=400)
-    try:
-        user = User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        return Response({'detail': 'User not found'}, status=404)
-
-    acc, created = UserCameraAccess.objects.get_or_create(
-        user=user, camera=cam,
-        defaults={
-            'can_view': request.data.get('can_view', True),
-            'can_manage': request.data.get('can_manage', False),
-            'can_download': request.data.get('can_download', False),
-            'can_delete_media': request.data.get('can_delete_media', False),
-            'granted_by': request.user,
-        }
-    )
-    if not created:
-        acc.can_view = request.data.get('can_view', acc.can_view)
-        acc.can_manage = request.data.get('can_manage', acc.can_manage)
-        acc.can_download = request.data.get('can_download', acc.can_download)
-        acc.can_delete_media = request.data.get('can_delete_media', acc.can_delete_media)
-        acc.save()
-    return Response(_acc_to_dict(acc), status=201 if created else 200)
-
-
-@api_view(['PATCH', 'DELETE'])
-def api_camera_access_detail(request, pk, acc_pk):
-    try:
-        cam = Camera.objects.get(pk=pk)
-    except Camera.DoesNotExist:
-        return Response({'detail': 'Not found'}, status=404)
-
-    if not cam.is_editable_by(request.user):
-        return Response({'detail': 'Permission denied'}, status=403)
-
-    try:
-        acc = UserCameraAccess.objects.get(pk=acc_pk, camera_id=pk)
-    except UserCameraAccess.DoesNotExist:
-        return Response({'detail': 'Not found'}, status=404)
-
-    if request.method == 'DELETE':
-        acc.delete()
-        return Response({'ok': True})
-
-    for field in ('can_view', 'can_manage', 'can_download', 'can_delete_media'):
-        if field in request.data:
-            # Explicit bool coercion — chống lỗi khi client gửi string "false" (truthy)
-            val = request.data[field]
-            if isinstance(val, str):
-                val = val.lower() not in ('false', '0', 'no', 'off', '')
-            setattr(acc, field, bool(val))
-    acc.save()
-    return Response(_acc_to_dict(acc))
 
 
 # ─────────────────────────────────────────────

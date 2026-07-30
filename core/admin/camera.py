@@ -7,7 +7,6 @@ from core.models import (
     CameraDevice,
     CameraSettings,
     Site,
-    UserCameraAccess,
 )
 
 
@@ -61,17 +60,6 @@ class CameraSettingsInline(admin.StackedInline):
     readonly_fields = ("exposure_mode", "last_synced_at")
 
 
-class UserCameraAccessInline(admin.TabularInline):
-    model = UserCameraAccess
-    extra = 0
-    readonly_fields = ("granted_by", "granted_at")
-    fields = (
-        "user", "can_view", "can_manage",
-        "can_download", "can_delete_media",
-        "granted_by", "granted_at",
-    )
-
-
 @admin.register(Site)
 class SiteAdmin(admin.ModelAdmin):
     list_display = ("name", "camera_count", "created_at")
@@ -89,7 +77,7 @@ class CameraAdmin(admin.ModelAdmin):
     list_filter = ("status", "camera_model", "site")
     search_fields = ("code", "name")
     readonly_fields = ("created_at", "updated_at")
-    inlines = (CameraDeviceInline, CameraSettingsInline, CameraCredentialInline, UserCameraAccessInline)
+    inlines = (CameraDeviceInline, CameraSettingsInline, CameraCredentialInline)
 
     @admin.display(description="Status")
     def status_badge(self, obj):
@@ -115,15 +103,3 @@ class CameraCredentialAdmin(admin.ModelAdmin):
     @admin.display(description="Key ID")
     def key_id_short(self, obj):
         return f"{obj.key_id[:12]}…"
-
-
-@admin.register(UserCameraAccess)
-class UserCameraAccessAdmin(admin.ModelAdmin):
-    list_display = (
-        "user", "camera", "can_view", "can_manage",
-        "can_download", "can_delete_media", "granted_by", "granted_at",
-    )
-    list_filter = ("can_view", "can_manage", "can_download", "camera__site")
-    search_fields = ("user__username", "camera__code")
-    readonly_fields = ("granted_at",)
-    autocomplete_fields = ("user", "camera", "granted_by")
