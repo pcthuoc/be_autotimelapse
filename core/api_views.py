@@ -712,7 +712,7 @@ def api_camera_simconfig(request, pk):
 
 @api_view(['POST'])
 def api_camera_power_on_cm4(request, pk):
-    """Gửi lệnh MQTT 'power_on_cm4' tới ESP32-S3 để bật nguồn CM4."""
+    """Gửi lệnh MQTT 'power_on_cm4' tới ESP32-S3 để cưỡng bức bật nguồn CM4."""
     try:
         cam = Camera.objects.get(pk=pk)
     except Camera.DoesNotExist:
@@ -730,6 +730,28 @@ def api_camera_power_on_cm4(request, pk):
         return Response({"ok": True, "cm4_power_state": "powering_on"})
     except Exception as exc:
         return Response({"detail": f"Không thể gửi lệnh bật CM4: {exc}"}, status=500)
+
+
+@api_view(['POST'])
+def api_camera_power_off_cm4(request, pk):
+    """Gửi lệnh MQTT 'power_off_cm4' tới ESP32-S3 để tắt CM4 và khôi phục chu kỳ tự động."""
+    try:
+        cam = Camera.objects.get(pk=pk)
+    except Camera.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    from mqtt_service import publisher
+    try:
+        publisher.publish_cmd(cam.code, "power_off_cm4", {})
+        dev, _ = CameraDevice.objects.get_or_create(camera=cam)
+        dev.cm4_power_state = "shutting_down"
+        dev.save(update_fields=["cm4_power_state", "updated_at"])
+        return Response({"ok": True, "cm4_power_state": "shutting_down"})
+    except Exception as exc:
+        return Response({"detail": f"Không thể gửi lệnh tắt CM4: {exc}"}, status=500)
 
 
 

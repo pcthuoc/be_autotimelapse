@@ -21,6 +21,7 @@ urlpatterns = [
     path('cameras/<uuid:pk>/simconfig/',         api_views.api_camera_simconfig),
     path('cameras/<uuid:pk>/mqtt-register/',     api_views.api_camera_mqtt_register),
     path('cameras/<uuid:pk>/power-on-cm4/',      api_views.api_camera_power_on_cm4),
+    path('cameras/<uuid:pk>/power-off-cm4/',     api_views.api_camera_power_off_cm4),
 
     # Sites
     path('sites/',                               api_views.api_sites),
