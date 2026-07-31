@@ -26,12 +26,12 @@ SECRET_KEY = 'django-insecure-u_am=8by79nhqo9p@msu21tm5v$nwlrvau@d3(z)qx-fog$%a!
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', '1') == '1'
 
-# Support comma-separated list or wildcard from env, default for local/dev.
-_allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '127.0.0.1,localhost,*').strip()
-if _allowed_hosts_env == '*':
+_allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '*').strip()
+_hosts_list = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+if '*' in _hosts_list:
     ALLOWED_HOSTS = ['*']
 else:
-    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+    ALLOWED_HOSTS = _hosts_list
 
 
 # Application definition
