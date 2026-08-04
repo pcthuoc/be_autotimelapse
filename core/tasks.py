@@ -178,11 +178,13 @@ def render_timelapse_video(self, render_id):
             if downloaded == 0:
                 raise RuntimeError("Không tải được ảnh nào.")
 
-            # Render bằng ffmpeg
+            # Render bằng ffmpeg với nice -n 19 (ưu tiên thấp nhất) và giới hạn threads=2 để bảo vệ web server/host CPU
             output_path = os.path.join(tmpdir, "output.mp4")
             w, h = render.resolution.split("x")
             cmd = [
+                "nice", "-n", "19",
                 "ffmpeg", "-y",
+                "-threads", "2",
                 "-f", "concat", "-safe", "0",
                 "-i", list_file,
                 "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
