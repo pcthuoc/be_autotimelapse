@@ -8,11 +8,13 @@ Django KHÔNG serve file. Nó chỉ:
 Tách riêng ở đây để sau này đổi sang Cloudflare R2 chỉ cần sửa 1 chỗ.
 """
 
+import hashlib
 from functools import lru_cache
 
 import boto3
 from botocore.client import Config
 from django.conf import settings
+from django.core.cache import cache
 
 
 def _make_client(endpoint_url):
@@ -105,6 +107,52 @@ def presigned_get_url(key, expire=None, download_name=None, inline_content_type=
         Params=params,
         ExpiresIn=expire or cfg["PRESIGN_EXPIRE"],
     )
+
+
+# ── Presigned URL cache (Redis pull-through) ──────────────────────────────────
+
+_PRESIGN_CACHE_RATIO = 0.85  # cache 85% TTL → URL trả ra luôn còn ít nhất 9 phút hạn
+
+
+def _presign_cache_key(key, ttl_bucket):
+    """Tạo Redis key ổn định cho 1 s3 key + TTL bucket."""
+    raw = f"presign:{_bucket()}:{key}:{ttl_bucket}"
+    return "psurl:" + hashlib.md5(raw.encode()).hexdigest()
+
+
+def presigned_get_url_cached(key, expire=None, **kwargs):
+    """
+    Sinh presigned GET URL với cache Redis (pull-through).
+
+    Khi user vào gallery trang N:
+      - Lần đầu (cache MISS) → boto3 ký URL → lưu Redis {TTL × 85%} giây
+      - Lần sau trong cùng cửa sổ TTL (cache HIT) → trả luôn từ Redis ~2ms
+      - Sau khi cache hết hạn → lần sau sẽ ký lại URL mới
+    """
+    if not key:
+        return None
+    ttl = expire or settings.SEAWEED["PRESIGN_EXPIRE"]
+    # Làm tròn xuống 600s để các URL trong cùng time-window dùng chung cache key
+    ttl_bucket = (ttl // 600) * 600
+    c_key = _presign_cache_key(key, ttl_bucket)
+
+    cached = cache.get(c_key)
+    if cached:
+        return cached
+
+    url = presigned_get_url(key, expire=ttl, **kwargs)
+    if url:
+        cache.set(c_key, url, timeout=int(ttl * _PRESIGN_CACHE_RATIO))
+    return url
+
+
+def _invalidate_presign_cache_key(key, expire=None):
+    """Xóa cache presigned URL của 1 s3 key (gọi khi xóa Media record)."""
+    if not key:
+        return
+    ttl = expire or settings.SEAWEED["PRESIGN_EXPIRE"]
+    ttl_bucket = (ttl // 600) * 600
+    cache.delete(_presign_cache_key(key, ttl_bucket))
 
 
 def presigned_put_url(key, content_type="image/jpeg", expire=None):

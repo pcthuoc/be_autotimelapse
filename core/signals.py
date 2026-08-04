@@ -72,3 +72,20 @@ def media_stat_dec(sender, instance, **kwargs):
         MediaDayStat.objects.filter(pk=stat.pk).update(
             cover=nxt if nxt else None
         )
+
+
+# ── Presigned URL cache invalidation khi xoá Media ───────────────────────────
+
+@receiver(post_delete, sender=Media)
+def media_presign_cache_invalidate(sender, instance, **kwargs):
+    """
+    Xóa cache presigned URL của ảnh vừa bị xoá.
+    Đảm bảo URL cached trong Redis không còn trỏ về file đã không tồn tại.
+    """
+    try:
+        from core.utils.storage import _invalidate_presign_cache_key
+        _invalidate_presign_cache_key(instance.s3_key)
+        if instance.thumb_key:
+            _invalidate_presign_cache_key(instance.thumb_key)
+    except Exception:  # noqa: BLE001 - không để lỗi cache làm sập signal
+        pass

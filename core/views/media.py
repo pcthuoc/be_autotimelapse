@@ -49,7 +49,7 @@ def _presign_thumbs(items):
     return [
         {
             "obj": m,
-            "thumb_url": storage.presigned_get_url(
+            "thumb_url": storage.presigned_get_url_cached(
                 m.effective_thumb_key, expire=_THUMB_TTL
             ),
         }

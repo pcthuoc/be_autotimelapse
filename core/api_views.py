@@ -1012,8 +1012,8 @@ def api_media_gallery(request, camera_pk):
             'size_bytes': m.size_bytes,
             'width': m.width,
             'height': m.height,
-            'thumb_url': _storage.presigned_get_url(m.effective_thumb_key, expire=3600) or '',
-            'view_url': _storage.presigned_get_url(m.s3_key, expire=3600) or '',
+            'thumb_url': _storage.presigned_get_url_cached(m.effective_thumb_key, expire=3600) or '',
+            'view_url': _storage.presigned_get_url_cached(m.s3_key, expire=3600) or '',
         })
 
     resp = paginator.get_paginated_response(photos)
