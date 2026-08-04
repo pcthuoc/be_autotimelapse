@@ -6,6 +6,7 @@ import json
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.conf import settings
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
