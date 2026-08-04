@@ -152,57 +152,106 @@ def render_timelapse_video(self, render_id):
         render.item_count = len(frames)
         render.save(update_fields=["item_count"])
 
+        # Lấy thông số cấu hình từ Hardware Profile
+        chunk_size = getattr(settings, "RENDER_CHUNK_SIZE", 150)
+        ffmpeg_threads = str(getattr(settings, "FFMPEG_THREADS", 1))
+        w, h = render.resolution.split("x")
+
+        # Chia nhỏ frames thành các phân đoạn (chunks)
+        chunks = [frames[i:i + chunk_size] for i in range(0, len(frames), chunk_size)]
+        total_chunks = len(chunks)
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Tải ảnh — dùng client S3 nội bộ (KHÔNG dùng presigned URL vì
-            # presigned ký với public endpoint, không resolve được trong container)
-            list_file = os.path.join(tmpdir, "frames.txt")
-            downloaded = 0
-            with open(list_file, "w") as lf:
-                for i, m in enumerate(frames):
-                    try:
-                        data = storage.download_bytes(m.s3_key)
-                        dst = os.path.join(tmpdir, f"frame_{i:06d}.jpg")
-                        with open(dst, "wb") as fh:
-                            fh.write(data)
-                        lf.write(f"file '{dst}'\n")
-                        lf.write(f"duration {1.0 / max(render.fps, 1):.4f}\n")
-                        downloaded += 1
-                        # Cập nhật progress mỗi 10%
-                        pct = int(downloaded / len(frames) * 50)
-                        if pct != render.progress:
-                            render.progress = pct
-                            render.save(update_fields=["progress"])
-                    except Exception:  # noqa: BLE001
-                        continue
+            segment_paths = []
 
-            if downloaded == 0:
-                raise RuntimeError("Không tải được ảnh nào.")
+            for c_idx, chunk_frames in enumerate(chunks):
+                chunk_dir = os.path.join(tmpdir, f"chunk_{c_idx:04d}")
+                os.makedirs(chunk_dir, exist_ok=True)
+                list_file = os.path.join(chunk_dir, "frames.txt")
+                downloaded = 0
 
-            # Render bằng ffmpeg với nice -n 19 (ưu tiên thấp nhất) và giới hạn threads=2 để bảo vệ web server/host CPU
+                with open(list_file, "w") as lf:
+                    for i, m in enumerate(chunk_frames):
+                        try:
+                            data = storage.download_bytes(m.s3_key)
+                            dst = os.path.join(chunk_dir, f"frame_{i:06d}.jpg")
+                            with open(dst, "wb") as fh:
+                                fh.write(data)
+                            lf.write(f"file '{dst}'\n")
+                            lf.write(f"duration {1.0 / max(render.fps, 1):.4f}\n")
+                            downloaded += 1
+                        except Exception:  # noqa: BLE001
+                            continue
+
+                if downloaded == 0:
+                    continue
+
+                # Render phân đoạn này ra file MPEG-TS tạm
+                seg_path = os.path.join(tmpdir, f"segment_{c_idx:04d}.ts")
+                cmd = [
+                    "nice", "-n", "19",
+                    "ffmpeg", "-y",
+                    "-threads", ffmpeg_threads,
+                    "-f", "concat", "-safe", "0",
+                    "-i", list_file,
+                    "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "23",
+                    "-pix_fmt", "yuv420p",
+                    seg_path,
+                ]
+                result = subprocess.run(cmd, capture_output=True, timeout=1800)  # noqa: S603
+                if result.returncode != 0:
+                    raise RuntimeError(f"Lỗi render segment {c_idx}: " + result.stderr.decode()[-300:])
+
+                segment_paths.append(seg_path)
+
+                # Dọn dẹp ảnh tạm của chunk để giải phóng đĩa cứng & RAM
+                for f in os.listdir(chunk_dir):
+                    os.remove(os.path.join(chunk_dir, f))
+                os.rmdir(chunk_dir)
+
+                # Cập nhật tiến độ UI (tải + render từng chunk chiếm từ 0% → 90%)
+                pct = int((c_idx + 1) / total_chunks * 90)
+                render.progress = pct
+                render.save(update_fields=["progress"])
+
+            if not segment_paths:
+                raise RuntimeError("Không tải hoặc render được phân đoạn nào.")
+
             output_path = os.path.join(tmpdir, "output.mp4")
-            w, h = render.resolution.split("x")
-            cmd = [
-                "nice", "-n", "19",
-                "ffmpeg", "-y",
-                "-threads", "2",
-                "-f", "concat", "-safe", "0",
-                "-i", list_file,
-                "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                output_path,
-            ]
-            result = subprocess.run(cmd, capture_output=True, timeout=1800)  # noqa: S603
-            if result.returncode != 0:
-                raise RuntimeError(result.stderr.decode()[-500:])
 
-            render.progress = 80
+            if len(segment_paths) == 1:
+                # Chỉ có 1 segment → copy thẳng ra output.mp4
+                cmd_concat = [
+                    "ffmpeg", "-y", "-i", segment_paths[0],
+                    "-c", "copy", "-movflags", "+faststart", output_path
+                ]
+            else:
+                # Có nhiều segments → ghép siêu tốc bằng concat protocol (0% re-encode CPU)
+                concat_list = os.path.join(tmpdir, "concat_list.txt")
+                with open(concat_list, "w") as cl:
+                    for sp in segment_paths:
+                        cl.write(f"file '{sp}'\n")
+
+                cmd_concat = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", concat_list,
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    output_path,
+                ]
+
+            res_concat = subprocess.run(cmd_concat, capture_output=True, timeout=300)  # noqa: S603
+            if res_concat.returncode != 0:
+                raise RuntimeError("Lỗi ghép video: " + res_concat.stderr.decode()[-300:])
+
+            render.progress = 95
             render.save(update_fields=["progress"])
 
-            # Upload MP4 lên SeaweedFS (dùng put_bytes thay vì đọc toàn bộ vào RAM)
+            # Upload MP4 lên SeaweedFS
             output_key = (
                 f"{render.camera_id}/renders/"
                 f"{render.date_from}_{render.date_to}_{render.fps}fps_{render.resolution}_{render.id}.mp4"
@@ -222,3 +271,4 @@ def render_timelapse_video(self, render_id):
         render.status = VideoRender.Status.FAILED
         render.error = str(exc)[:1000]
         render.save(update_fields=["status", "error"])
+

@@ -192,9 +192,34 @@ MQTT_CLIENT_ID = _os.environ.get("MQTT_CLIENT_ID", "")          # rỗng → t�
 MQTT_SKIP_ACL_SETUP = _os.environ.get("MQTT_SKIP_ACL_SETUP", "0") == "1"
 MQTT_ENABLED = _os.environ.get("MQTT_ENABLED", "1") == "1"
 
-# Vòng đời file nén tải về (giờ). Hết hạn → xoá khỏi SeaweedFS.
+# ── Hardware Profile Adaptation (VPS LOW: 2GB RAM / MEDIUM: 8GB / HIGH: 16GB+) ──
+SYSTEM_PROFILE = _os.environ.get("SYSTEM_PROFILE", "LOW").upper()
+
+PROFILE_SETTINGS = {
+    "LOW": {
+        "MEDIA_ARCHIVE_MAX_ITEMS": 1500,
+        "RENDER_CHUNK_SIZE": 150,
+        "FFMPEG_THREADS": 1,
+    },
+    "MEDIUM": {
+        "MEDIA_ARCHIVE_MAX_ITEMS": 3000,
+        "RENDER_CHUNK_SIZE": 300,
+        "FFMPEG_THREADS": 2,
+    },
+    "HIGH": {
+        "MEDIA_ARCHIVE_MAX_ITEMS": 5000,
+        "RENDER_CHUNK_SIZE": 500,
+        "FFMPEG_THREADS": 4,
+    },
+}
+
+_cur_prof = PROFILE_SETTINGS.get(SYSTEM_PROFILE, PROFILE_SETTINGS["LOW"])
+
 MEDIA_ARCHIVE_TTL_HOURS = 24
-MEDIA_ARCHIVE_MAX_ITEMS = 5000            # trần số ảnh 1 lần gom tải
+MEDIA_ARCHIVE_MAX_ITEMS = int(_os.environ.get("MEDIA_ARCHIVE_MAX_ITEMS", _cur_prof["MEDIA_ARCHIVE_MAX_ITEMS"]))
+RENDER_CHUNK_SIZE = int(_os.environ.get("RENDER_CHUNK_SIZE", _cur_prof["RENDER_CHUNK_SIZE"]))
+FFMPEG_THREADS = int(_os.environ.get("FFMPEG_THREADS", _cur_prof["FFMPEG_THREADS"]))
+
 
 
 # Load local overrides (secret, DB, DEBUG) — KHÔNG commit file này
