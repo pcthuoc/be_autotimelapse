@@ -171,6 +171,17 @@ CELERY_WORKER_MAX_TASKS_PER_CHILD = 50    # tránh rò rỉ bộ nhớ
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TIMEZONE = "Asia/Ho_Chi_Minh"
 
+# ── Celery Queue Routing ─────────────────────────────────────────────────────
+# archive: nén ZIP ảnh (I/O nặng, ưu tiên cao)
+# render:  ffmpeg render video (CPU cực nặng, chạy riêng biệt, concurrency=1)
+# default: tác vụ chung (cleanup, beat tasks, ...)
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ROUTES = {
+    "core.tasks.build_media_archive":      {"queue": "archive"},
+    "core.tasks.cleanup_expired_archives": {"queue": "default"},
+    "core.tasks.render_timelapse_video":   {"queue": "render"},
+}
+
 # ── MQTT: giao tiếp với trạm camera (Mosquitto + Dynamic Security) ──────────
 import os as _os
 MQTT_BROKER = _os.environ.get("MQTT_BROKER", "127.0.0.1")

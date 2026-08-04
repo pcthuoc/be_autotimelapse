@@ -21,7 +21,7 @@ from core.models.media import Media, MediaArchive, VideoRender
 from core.utils import storage
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, queue="archive")
 def build_media_archive(self, archive_id):
     """Nén ảnh của 1 MediaArchive thành ZIP, cập nhật trạng thái + vòng đời."""
     try:
@@ -74,7 +74,7 @@ def build_media_archive(self, archive_id):
         raise
 
 
-@shared_task
+@shared_task(queue="default")
 def cleanup_expired_archives():
     """Xoá ZIP đã quá hạn khỏi SeaweedFS + đánh dấu expired."""
     now = timezone.now()
@@ -95,7 +95,7 @@ def cleanup_expired_archives():
     return n
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, queue="render")
 def render_timelapse_video(self, render_id):
     """
     Render video timelapse từ ảnh của 1 VideoRender.
