@@ -258,14 +258,49 @@ def media_archive_create(request, camera_pk):
             status=400,
         )
 
+    # 1. Tính toán số lượng ảnh thực tế khớp với bộ lọc
+    qs = Media.objects.filter(camera=camera)
+    if ids:
+        qs = qs.filter(pk__in=ids)
+    if date_from:
+        qs = qs.filter(taken_at__gte=date_from)
+    if date_to:
+        qs = qs.filter(taken_at__lte=date_to)
+
+    photo_count = qs.count()
+    if photo_count == 0:
+        return JsonResponse(
+            {"ok": False, "error": "Không tìm thấy ảnh nào khớp với khoảng thời gian đã chọn."},
+            status=400,
+        )
+
+    max_items = getattr(settings, "MEDIA_ARCHIVE_MAX_ITEMS", 5000)
+    if photo_count > max_items:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": f"Bộ lọc đã chọn chứa {photo_count} ảnh, vượt quá giới hạn tối đa {max_items} ảnh cho mỗi lần tải về. Vui lòng thu hẹp khoảng thời gian.",
+            },
+            status=400,
+        )
+
+    # 2. Phân loại độ ưu tiên (9: Cao, 5: Trung bình, 2: Thấp)
+    if photo_count <= 100:
+        priority = 9
+    elif photo_count <= 1000:
+        priority = 5
+    else:
+        priority = 2
+
     archive = MediaArchive.objects.create(
         requested_by=request.user,
         camera=camera,
         media_ids=ids,
         date_from=date_from,
         date_to=date_to,
+        item_count=photo_count,
     )
-    build_media_archive.delay(str(archive.id))
+    build_media_archive.apply_async(args=[str(archive.id)], priority=priority)
     return JsonResponse(
         {
             "ok": True,
