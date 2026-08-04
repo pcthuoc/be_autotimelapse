@@ -25,6 +25,7 @@ urlpatterns = [
 
     # Sites
     path('sites/',                               api_views.api_sites),
+    path('sites/<uuid:pk>/',                     api_views.api_site_detail),
     path('sites/<uuid:pk>/assign-client/',       api_views.api_site_assign_client),
 
     # Media

@@ -904,6 +904,42 @@ def api_sites(request):
     return Response({'id': str(site.id), 'name': site.name}, status=201)
 
 
+@api_view(['GET', 'PATCH', 'DELETE'])
+def api_site_detail(request, pk):
+    """Chi tiết, cập nhật hoặc xoá 1 Site (Dự án)."""
+    try:
+        site = Site.objects.get(pk=pk)
+    except Site.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+
+    if not (request.user.is_staff or is_client_admin(request.user)):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    if request.method == 'GET':
+        return Response({
+            'id': str(site.id),
+            'name': site.name,
+            'description': site.description,
+            'location': getattr(site, 'location', ''),
+            'client_id': str(site.client_id) if site.client_id else None,
+            'cam_count': site.cameras.count(),
+        })
+
+    elif request.method == 'PATCH':
+        if 'name' in request.data:
+            site.name = str(request.data['name']).strip()
+        if 'description' in request.data:
+            site.description = str(request.data['description'])
+        if 'location' in request.data:
+            site.location = str(request.data['location'])
+        site.save()
+        return Response({'ok': True, 'name': site.name})
+
+    elif request.method == 'DELETE':
+        site.delete()
+        return Response({'ok': True, 'detail': 'Site deleted successfully'})
+
+
 # ─────────────────────────────────────────────
 # Camera Access Management
 # ─────────────────────────────────────────────
