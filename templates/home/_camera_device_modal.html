@@ -258,19 +258,6 @@
         </div>
       </div>
     </div>
-
-    {# Cell voltages #}
-    {% if device.cell_voltages %}
-    <div class="mt-2">
-      <div class="text-uppercase text-xs fw-bold opacity-50 mb-1">{% trans "Cell voltages" %}</div>
-      <div class="d-flex flex-wrap gap-1">
-        {% for v in device.cell_voltages %}
-        <span class="badge dev-cell">{{ forloop.counter }}: {{ v }}V</span>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
   </div>{# /modal-body #}
 </div>
 
