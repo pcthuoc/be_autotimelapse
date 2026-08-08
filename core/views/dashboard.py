@@ -7,24 +7,30 @@ from django.utils import timezone
 
 from core.models.camera import Camera, Site
 from core.models.media import Media, MediaDayStat
-from core.models.permission import UserRole
+from core.models.permission import ClientMembership
 from core.utils import storage as _storage
 
 
 def _has_perm(user, code):
     if user.is_staff:
         return True
-    return UserRole.objects.filter(
-        user=user, role__role_permissions__permission__code=code
-    ).exists()
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return False
+    if code in ('camera.view', 'media.view'):
+        return True
+    return m.role == 'admin'
 
 
 def _camera_qs(user):
     if user.is_staff:
         return Camera.objects.select_related("site").order_by("site__name", "code")
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return Camera.objects.none()
     return (
         Camera.objects.select_related("site")
-        .filter(user_accesses__user=user, user_accesses__can_view=True)
+        .filter(site__client=m.client)
         .order_by("site__name", "code")
     )
 

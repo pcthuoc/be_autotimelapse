@@ -454,10 +454,7 @@ def api_cameras(request):
     CameraDevice.objects.get_or_create(camera=cam)
     CameraSettings.objects.get_or_create(camera=cam)
 
-    # Tự sinh credential ngay — raw_secret chỉ hiện 1 lần
-    cred, raw_secret = CameraCredential.generate_credential(cam)
-
-    # Đăng ký MQTT — ghi lại kết quả thật vào response (không bắt lỗi im lặng)
+    # Đăng ký MQTT
     mqtt_ok = False
     mqtt_errors = []
     try:
@@ -472,6 +469,7 @@ def api_cameras(request):
     server_base = request.build_absolute_uri('/').rstrip('/') if request else 'http://localhost'
 
     resp = camera_to_dict(cam, request)
+    # Cấu hình thiết bị: chỉ cần 2 giá trị này
     resp['simconfig'] = {
         'CAMERA_CODE':   cam.code,
         'MQTT_PASSWORD': cam.mqtt_password,
@@ -671,9 +669,9 @@ def api_camera_credentials(request, pk):
             'device_key': cred.key_id,
             'device_secret': raw_secret,       # Chỉ hiện 1 lần!
             'mqtt_password': cam.mqtt_password,
-            'mqtt_broker': 'localhost',
-            'mqtt_port': 1884,
-            'server_base': 'http://localhost',
+            'mqtt_broker': getattr(settings, 'MQTT_PUBLIC_BROKER', 'mqtt.congnghetimelapse.com'),
+            'mqtt_port': int(getattr(settings, 'MQTT_PUBLIC_PORT', 1883)),
+            'server_base': f"{getattr(settings, 'SITE_SCHEME', 'https')}://{getattr(settings, 'SITE_DOMAIN', 'cloud.congnghetimelapse.com')}",
             'note': 'Lưu device_secret ngay — sau này không lấy lại được.',
         }, status=201)
 
@@ -1013,8 +1011,9 @@ def api_media_gallery(request, camera_pk):
             'size_bytes': m.size_bytes,
             'width': m.width,
             'height': m.height,
-            'thumb_url': _storage.presigned_get_url_cached(m.effective_thumb_key, expire=3600) or '',
-            'view_url': _storage.presigned_get_url_cached(m.s3_key, expire=3600) or '',
+            # Thumbnail luôn trên SeaweedFS; ảnh gốc routing theo m.storage
+            'thumb_url': _storage.presigned_get_url_cached(m.effective_thumb_key, expire=3600, storage='seaweed') or '',
+            'view_url': _storage.presigned_get_url_cached(m.s3_key, expire=3600, storage=m.storage) or '',
         })
 
     resp = paginator.get_paginated_response(photos)
@@ -1061,8 +1060,9 @@ def api_renders(request):
         if r.status == 'ready' and r.output_key:
             try:
                 fname = f"{r.camera.code}_{r.date_from}_{r.date_to}.mp4"
-                download_url = _st.presigned_get_url(r.output_key, expire=3600, download_name=fname)
-                stream_url = _st.presigned_get_url(r.output_key, expire=3600, inline_content_type='video/mp4')
+                _rs = "r2" if _st._r2_enabled() else None
+                download_url = _st.presigned_get_url(r.output_key, expire=3600, download_name=fname, storage=_rs)
+                stream_url = _st.presigned_get_url(r.output_key, expire=3600, inline_content_type='video/mp4', storage=_rs)
             except Exception:
                 download_url = None
         data.append({
@@ -1084,6 +1084,7 @@ def api_renders(request):
             'frame_interval': r.frame_interval,
             'created_at': r.created_at.isoformat(),
             'ready_at': r.ready_at.isoformat() if r.ready_at else None,
+            'expires_at': r.expires_at.isoformat() if getattr(r, 'expires_at', None) else None,
         })
     return paginator.get_paginated_response(data)
 
@@ -1279,8 +1280,10 @@ def api_downloads(request):
         url = None
         if r.status == 'ready' and r.output_key:
             try:
+                _rs = "r2" if _st._r2_enabled() else None
                 url = _st.presigned_get_url(r.output_key, expire=3600,
-                                            download_name=f"{r.camera.code}_{r.date_from}_{r.date_to}.mp4")
+                                            download_name=f"{r.camera.code}_{r.date_from}_{r.date_to}.mp4",
+                                            storage=_rs)
             except Exception:
                 url = None
         items.append({
@@ -1300,8 +1303,14 @@ def api_downloads(request):
         url = None
         if a.status == 'ready' and a.zip_key:
             try:
-                url = _st.presigned_get_url(a.zip_key, expire=3600,
-                                            download_name=f"{a.camera.code}_photos.zip")
+                _arc_storage = "r2" if _st._r2_enabled() else None
+                url = _st.presigned_get_url(
+                    a.zip_key,
+                    expire=3600,
+                    download_name=f"{a.camera.code}_photos.zip",
+                    storage=_arc_storage,
+                    r2_output=bool(_arc_storage),
+                )
             except Exception:
                 url = None
         items.append({
@@ -1753,6 +1762,107 @@ def api_alert_settings(request):
             'notify_email': s.notify_email if s else '',
         })
     return Response(data)
+
+
+@api_view(['DELETE'])
+def api_media_delete(request, pk):
+    """Xóa 1 ảnh — file trên storage xóa qua signal post_delete."""
+    media = Media.objects.select_related('camera').filter(pk=pk).first()
+    if not media:
+        return Response({'detail': 'Not found'}, status=404)
+    if not media.is_deletable_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+    media.delete()
+    return Response(status=204)
+
+
+@api_view(['POST'])
+def api_media_bulk_delete(request):
+    """Xóa nhiều ảnh — body: {"ids": ["uuid1", "uuid2", ...]}"""
+    ids = request.data.get('ids') or []
+    if not ids or len(ids) > 500:
+        return Response({'detail': 'ids required, max 500'}, status=400)
+    qs = Media.objects.select_related('camera').filter(pk__in=ids)
+    deleted = 0
+    for m in qs:
+        if m.is_deletable_by(request.user):
+            m.delete()
+            deleted += 1
+    return Response({'deleted': deleted})
+
+
+@api_view(['GET'])
+def api_storage_stats(request):
+    """Tổng quan dung lượng: SeaweedFS hot + R2 cold + phân bổ theo storage type."""
+    if not request.user.is_staff:
+        return Response({'detail': 'Admin only'}, status=403)
+
+    from django.db.models import Sum, Count
+    from core.utils.storage import _r2_enabled
+
+    # ── DB-level stats ────────────────────────────────────────────────────────
+    breakdown = (
+        Media.objects
+        .values('storage')
+        .annotate(count=Count('id'), bytes=Sum('size_bytes'))
+        .order_by('storage')
+    )
+    seaweed_bytes = r2_bytes = seaweed_count = r2_count = 0
+    for row in breakdown:
+        if row['storage'] == 'r2':
+            r2_bytes = row['bytes'] or 0
+            r2_count = row['count']
+        else:
+            seaweed_bytes = row['bytes'] or 0
+            seaweed_count = row['count']
+
+    # ── SeaweedFS volume stats (live) ─────────────────────────────────────────
+    seaweed_volumes = seaweed_max_bytes = None
+    try:
+        import urllib.request, json as _json
+        with urllib.request.urlopen('http://seaweed-master:9333/vol/status', timeout=3) as r:
+            vdata = _json.loads(r.read())
+        vols = (vdata.get('Volumes', {})
+                .get('DataCenters', {})
+                .get('DefaultDataCenter', {})
+                .get('DefaultRack', {})
+                .get('seaweed-volume:8080', []))
+        seaweed_volumes = len(vols)
+        # -max=20, mỗi volume tối đa 1024MB
+        seaweed_max_bytes = 20 * 1024 * 1024 * 1024
+    except Exception:
+        pass
+
+    # ── R2 config ─────────────────────────────────────────────────────────────
+    from django.conf import settings as _s
+    r2_cfg = getattr(_s, 'R2', {})
+
+    return Response({
+        'seaweed': {
+            'enabled': True,
+            'count': seaweed_count,
+            'bytes': seaweed_bytes,
+            'volumes': seaweed_volumes,
+            'max_bytes': seaweed_max_bytes,
+            'usage_pct': round(seaweed_bytes / seaweed_max_bytes * 100, 1) if seaweed_max_bytes else None,
+        },
+        'r2': {
+            'enabled': _r2_enabled(),
+            'endpoint': r2_cfg.get('ENDPOINT_URL', ''),
+            'bucket': r2_cfg.get('BUCKET', ''),
+            'output_bucket': r2_cfg.get('OUTPUT_BUCKET', ''),
+            'count': r2_count,
+            'bytes': r2_bytes,
+        },
+        'total': {
+            'count': seaweed_count + r2_count,
+            'bytes': seaweed_bytes + r2_bytes,
+        },
+        'config': {
+            'hot_days': getattr(_s, 'STORAGE_HOT_DAYS', 30),
+            'render_ttl_days': getattr(_s, 'VIDEO_RENDER_TTL_DAYS', 7),
+        },
+    })
 
 
 @api_view(['POST'])

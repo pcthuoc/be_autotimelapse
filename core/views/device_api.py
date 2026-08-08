@@ -16,6 +16,7 @@ Chống lạm dụng: giới hạn kích thước frame, key sinh phía server (
 tự chọn key), prefix key theo camera_id → camera không ghi đè dữ liệu camera khác.
 """
 import json
+import secrets
 import uuid
 from functools import wraps
 
@@ -26,7 +27,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from core.models.camera import Camera, CameraCredential
+from core.models.camera import Camera
 from core.utils import storage
 
 # Frame Live View tối đa 512 KB (preview 640x424 thực tế ~20 KB)
@@ -39,41 +40,20 @@ PRESIGN_EXPIRE = 600         # giây — URL upload sống 10 phút
 # ── Xác thực thiết bị ────────────────────────────────────────────────────────
 
 def device_auth(view):
-    """Decorator xác thực camera qua 2 cách (ưu tiên đơn giản trước):
-
-    1. X-Device-Key = camera.code  +  X-Device-Secret = camera.mqtt_password
-       → Đơn giản nhất, cùng thông số với MQTT, không hết hạn.
-
-    2. X-Device-Key = CameraCredential.key_id  +  X-Device-Secret = raw secret
-       → Legacy / cho phép rotate key riêng biệt.
-    """
+    """Xác thực camera: X-Device-Key = camera.code, X-Device-Secret = mqtt_password."""
     @wraps(view)
     def wrapper(request, *args, **kwargs):
         key = request.headers.get("X-Device-Key", "")
         secret = request.headers.get("X-Device-Secret", "")
         if not key or not secret:
             return JsonResponse({"error": "Missing credentials"}, status=401)
-
-        # ── Cách 1: camera_code + mqtt_password (đơn giản, không hết hạn) ──
         try:
             cam = Camera.objects.get(code=key)
-            if cam.mqtt_password and cam.mqtt_password == secret:
+            if cam.mqtt_password and secrets.compare_digest(cam.mqtt_password, secret):
                 request.camera = cam
                 return view(request, *args, **kwargs)
         except Camera.DoesNotExist:
             pass
-
-        # ── Cách 2: CameraCredential key_id + hashed secret (legacy) ──
-        try:
-            cred = CameraCredential.objects.select_related("camera").get(
-                key_id=key, status=CameraCredential.Status.ACTIVE
-            )
-            if check_password(secret, cred.secret_hash):
-                request.camera = cred.camera
-                return view(request, *args, **kwargs)
-        except CameraCredential.DoesNotExist:
-            pass
-
         return JsonResponse({"error": "Invalid credentials"}, status=401)
     return wrapper
 
@@ -109,17 +89,24 @@ def upload_presign(request):
     prefix = f"{request.camera.id}/{taken_at:%Y/%m/%d}"
     key = f"{prefix}/{media_id}.{ext}"
 
+    from django.conf import settings as _s
+    storage_backend = "r2" if getattr(_s, "R2", {}).get("ENDPOINT_URL") else "seaweed"
+
     data = {
         "media_id": str(media_id),
         "key": key,
-        "url": storage.presigned_put_url(key, content_type, expire=PRESIGN_EXPIRE),
+        "storage": storage_backend,
+        "url": storage.presigned_put_url(key, content_type, expire=PRESIGN_EXPIRE, storage=storage_backend),
     }
     if body.get("with_thumb"):
         thumb_key = f"{prefix}/{media_id}_thumb.jpg"
         data["thumb_key"] = thumb_key
+        # Thumbnail luôn vào SeaweedFS (VPS), bất kể ảnh gốc đi R2 hay Seaweed
         data["thumb_url"] = storage.presigned_put_url(
-            thumb_key, "image/jpeg", expire=PRESIGN_EXPIRE
+            thumb_key, "image/jpeg", expire=PRESIGN_EXPIRE, storage="seaweed"
         )
+    # Lưu storage backend vào Redis — upload_complete tự lookup, camera không cần gửi lại
+    cache.set(f"presign_storage:{media_id}", storage_backend, timeout=PRESIGN_EXPIRE + 60)
     return JsonResponse(data)
 
 
@@ -153,7 +140,16 @@ def upload_complete(request):
         return JsonResponse({"ok": True, "media_id": str(existing.pk),
                              "duplicate": True})
 
-    size = storage.head_size(key)
+    # Ưu tiên: lấy storage từ Redis (server đã lưu khi presign)
+    # Fallback: client gửi (firmware mới) → fallback cuối: "seaweed" (firmware cũ)
+    storage_backend = (
+        cache.get(f"presign_storage:{media_id}")
+        or body.get("storage", "seaweed")
+    )
+    if storage_backend not in ("seaweed", "r2"):
+        storage_backend = "seaweed"
+
+    size = storage.head_size(key, storage=storage_backend)
     if size is None:
         return JsonResponse({"error": "Object not found on storage"}, status=400)
 
@@ -161,8 +157,9 @@ def upload_complete(request):
     if thumb_key:
         if not thumb_key.startswith(f"{request.camera.id}/"):
             return JsonResponse({"error": "thumb_key not owned"}, status=403)
-        if storage.head_size(thumb_key) is None:
-            thumb_key = ""          # thumb chưa lên → fallback ảnh gốc
+        # Thumbnail luôn kiểm tra trên SeaweedFS
+        if storage.head_size(thumb_key, storage="seaweed") is None:
+            thumb_key = ""
 
     taken_at = _parse_taken_at(body.get("taken_at")) or timezone.now()
     media = Media.objects.create(
@@ -175,6 +172,7 @@ def upload_complete(request):
         size_bytes=size,
         width=int(body.get("width") or 0),
         height=int(body.get("height") or 0),
+        storage=storage_backend,
     )
     return JsonResponse({"ok": True, "media_id": str(media.pk)})
 

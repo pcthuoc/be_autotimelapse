@@ -45,7 +45,13 @@ from core.views.render import render_create, render_status, render_download, ren
 from core.views.settings_view import alert_settings_list, alert_settings_save
 from core.views.user import user_add, user_edit, user_list, user_toggle
 
+from django.http import JsonResponse
+
+def health(request):
+    return JsonResponse({"status": "ok"})
+
 urlpatterns = [
+    path('health/', health, name='health'),
     path('i18n/', include('django.conf.urls.i18n')),
     path('admin/', admin.site.urls),
     # REST API v1

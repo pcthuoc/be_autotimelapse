@@ -14,6 +14,9 @@ urlpatterns = [
     path('cameras/',                             api_views.api_cameras),
     path('cameras/<uuid:pk>/',                   api_views.api_camera_detail),
     path('cameras/<uuid:pk>/live/latest/',       api_views.api_camera_live_latest),
+    path('cameras/<uuid:pk>/live/start/',        api_views.api_camera_live_start),
+    path('cameras/<uuid:pk>/live/stop/',         api_views.api_camera_live_stop),
+    path('cameras/<uuid:pk>/live/frame/',        api_views.api_camera_live_frame),
     path('cameras/<uuid:pk>/device/',            api_views.api_camera_device),
     path('cameras/<uuid:pk>/device/update/',     api_views.api_camera_device_update),
     path('cameras/<uuid:pk>/camera-settings/',   api_views.api_camera_settings),
@@ -31,6 +34,9 @@ urlpatterns = [
     # Media
     path('media/camera/<uuid:camera_pk>/',          api_views.api_media_gallery),
     path('media/camera/<uuid:camera_pk>/archive/',  api_views.api_archive_create),
+    path('media/<uuid:pk>/',                        api_views.api_media_delete),
+    path('media/<uuid:pk>/download/',               api_views.api_media_download),
+    path('media/bulk-delete/',                      api_views.api_media_bulk_delete),
 
     # Renders
     path('renders/',                             api_views.api_renders),
@@ -58,5 +64,8 @@ urlpatterns = [
 
     # Alert settings
     path('settings/alert/',                      api_views.api_alert_settings),
+
+    # Storage stats (admin only)
+    path('storage/stats/',                       api_views.api_storage_stats),
     path('settings/alert/<uuid:camera_pk>/',     api_views.api_alert_settings_save),
 ]

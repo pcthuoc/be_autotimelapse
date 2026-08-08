@@ -6,15 +6,18 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from core.models.camera import AlertSettings, Camera
-from core.models.permission import UserRole
+from core.models.permission import ClientMembership
 
 
 def _has_perm(user, code):
     if user.is_staff:
         return True
-    return UserRole.objects.filter(
-        user=user, role__role_permissions__permission__code=code
-    ).exists()
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return False
+    if code in ('camera.view', 'media.view'):
+        return True
+    return m.role == 'admin'
 
 
 @login_required(login_url="/login/")
@@ -26,9 +29,12 @@ def alert_settings_list(request):
     if request.user.is_staff:
         cameras = Camera.objects.select_related("site__client").order_by("site__name", "code")
     else:
-        cameras = Camera.objects.filter(
-            user_accesses__user=request.user, user_accesses__can_manage=True
-        ).select_related("site__client").order_by("code")
+        m = ClientMembership.objects.filter(user=request.user, role='admin').first()
+        cameras = (
+            Camera.objects.filter(site__client=m.client)
+            .select_related("site__client").order_by("code")
+            if m else Camera.objects.none()
+        )
 
     cam_data = []
     for cam in cameras:

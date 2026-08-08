@@ -3,6 +3,7 @@ Tác vụ nền (Celery) cho media — chạy KHÔNG block request.
 
   - build_media_archive: nén nhiều ảnh thành 1 ZIP trên SeaweedFS.
   - cleanup_expired_archives: xoá ZIP hết hạn (vòng đời URL).
+  - cleanup_expired_renders: xoá video render cũ hơn VIDEO_RENDER_TTL_DAYS ngày.
   - render_timelapse_video: dựng video timelapse từ ảnh bằng ffmpeg.
 """
 
@@ -19,6 +20,7 @@ from django.utils import timezone
 
 from core.models.media import Media, MediaArchive, VideoRender
 from core.utils import storage
+from core.utils.storage import _r2_enabled
 
 
 @shared_task(bind=True, queue="archive")
@@ -46,7 +48,7 @@ def build_media_archive(self, archive_id):
         for m in qs:
             ts = timezone.localtime(m.taken_at)
             name = f"{m.camera.code}/{ts:%Y%m%d_%H%M%S}_{str(m.pk)[:8]}.jpg"
-            entries.append((name, m.s3_key))
+            entries.append((name, m.s3_key, m.storage))
 
         if not entries:
             archive.status = MediaArchive.Status.FAILED
@@ -95,17 +97,57 @@ def cleanup_expired_archives():
     return n
 
 
+@shared_task(queue="default")
+def cleanup_expired_renders():
+    """Xoá video render cũ hơn VIDEO_RENDER_TTL_DAYS khỏi storage."""
+    ttl = getattr(settings, "VIDEO_RENDER_TTL_DAYS", 7)
+    cutoff = timezone.now() - timedelta(days=ttl)
+    qs = VideoRender.objects.filter(
+        status=VideoRender.Status.READY,
+        ready_at__lt=cutoff,
+    )
+    n = 0
+    for vr in qs:
+        if vr.output_key:
+            try:
+                storage.delete_key(vr.output_key)
+            except Exception:  # noqa: BLE001
+                pass
+        vr.status = VideoRender.Status.EXPIRED
+        vr.output_key = ""
+        vr.error = ""
+        vr.save(update_fields=["status", "output_key", "error"])
+        n += 1
+    return n
+
+
+@shared_task(queue="default")
+def migrate_cold_to_r2():
+    """Di chuyển ảnh cũ hơn STORAGE_HOT_DAYS ngày từ SeaweedFS sang R2 (500 ảnh/lần)."""
+    from django.conf import settings as _s
+    if not getattr(_s, "R2", {}).get("ENDPOINT_URL"):
+        return 0  # R2 chưa cấu hình
+    hot_days = getattr(_s, "STORAGE_HOT_DAYS", 30)
+    cutoff = timezone.now() - timedelta(days=hot_days)
+    qs = Media.objects.filter(storage=Media.Storage.SEAWEED, taken_at__lt=cutoff).order_by("taken_at")[:500]
+    migrated = 0
+    for m in qs:
+        try:
+            # Thumbnail không migrate — luôn nằm trên SeaweedFS
+            data = storage.download_bytes(m.s3_key, storage="seaweed")
+            storage.put_bytes(m.s3_key, data, content_type=m.content_type, storage="r2")
+            storage.delete_key(m.s3_key, storage="seaweed")
+            m.storage = Media.Storage.R2
+            m.save(update_fields=["storage"])
+            migrated += 1
+        except Exception:  # noqa: BLE001
+            pass
+    return migrated
+
+
 @shared_task(bind=True, queue="render")
 def render_timelapse_video(self, render_id):
-    """
-    Render video timelapse từ ảnh của 1 VideoRender.
-
-    Quy trình:
-    1. Tải ảnh từ SeaweedFS vào thư mục tạm.
-    2. Dùng ffmpeg tạo MP4 từ danh sách ảnh.
-    3. Upload MP4 lên SeaweedFS.
-    4. Cập nhật VideoRender status → ready.
-    """
+    """Render video timelapse từ ảnh của 1 VideoRender."""
     try:
         render = VideoRender.objects.select_related("camera").get(pk=render_id)
     except VideoRender.DoesNotExist:
@@ -173,7 +215,7 @@ def render_timelapse_video(self, render_id):
                 with open(list_file, "w") as lf:
                     for i, m in enumerate(chunk_frames):
                         try:
-                            data = storage.download_bytes(m.s3_key)
+                            data = storage.download_bytes(m.s3_key, storage=m.storage)
                             dst = os.path.join(chunk_dir, f"frame_{i:06d}.jpg")
                             with open(dst, "wb") as fh:
                                 fh.write(data)
@@ -251,21 +293,24 @@ def render_timelapse_video(self, render_id):
             render.progress = 95
             render.save(update_fields=["progress"])
 
-            # Upload MP4 lên SeaweedFS
+            # Upload MP4 lên R2 output bucket (video là derived data, TTL 7 ngày)
+            out_storage = "r2" if _r2_enabled() else "seaweed"
             output_key = (
                 f"{render.camera_id}/renders/"
                 f"{render.date_from}_{render.date_to}_{render.fps}fps_{render.resolution}_{render.id}.mp4"
             )
             file_size = os.path.getsize(output_path)
             with open(output_path, "rb") as fh:
-                storage.put_bytes(output_key, fh.read(), content_type="video/mp4")
+                storage.put_bytes(output_key, fh.read(), content_type="video/mp4", storage=out_storage)
 
+        now = timezone.now()
         render.status = VideoRender.Status.READY
         render.output_key = output_key
         render.size_bytes = file_size
         render.progress = 100
-        render.ready_at = timezone.now()
-        render.save(update_fields=["status", "output_key", "size_bytes", "progress", "ready_at"])
+        render.ready_at = now
+        render.expires_at = now + timedelta(days=getattr(settings, "VIDEO_RENDER_TTL_DAYS", 7))
+        render.save(update_fields=["status", "output_key", "size_bytes", "progress", "ready_at", "expires_at"])
 
     except Exception as exc:  # noqa: BLE001
         render.status = VideoRender.Status.FAILED

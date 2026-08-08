@@ -76,6 +76,7 @@ class Camera(models.Model):
         """Dòng máy ảnh — mỗi giá trị tương ứng 1 profile settings."""
         NIKON_D5300  = "nikon_d5300",  "Nikon D5300"
         NIKON_D3500  = "nikon_d3500",  "Nikon D3500"
+        NIKON_D7100  = "nikon_d7100",  "Nikon D7100"
         NIKON_D7500  = "nikon_d7500",  "Nikon D7500"
         NIKON_Z50    = "nikon_z50",    "Nikon Z50"
         CANON_200D   = "canon_200d",   "Canon EOS 200D"
@@ -135,76 +136,63 @@ class Camera(models.Model):
         super().save(*args, **kwargs)
 
     # ------------------------------------------------------------------ #
-    # Object-level permission helpers (CODING_RULES §2, deny-by-default)
+    # Object-level permission helpers (deny-by-default)
+    # Source of truth: ClientMembership (role=admin|member, can_download flag)
     # ------------------------------------------------------------------ #
 
     def is_accessible_by(self, user):
-        """User có quyền xem camera này không."""
+        """Xem thông tin camera: bất kỳ thành viên nào trong client."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff:
             return True
-        if not self._has_role_perm(user, "camera.view"):
-            return False
-        return self._has_camera_scope(user, "can_view")
+        return self._get_membership(user) is not None
 
     def is_editable_by(self, user):
-        """User có quyền chỉnh sửa cấu hình camera này không."""
+        """Chỉnh sửa / xóa camera: chỉ client admin."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff:
             return True
-        if not self._has_role_perm(user, "camera.manage"):
-            return False
-        return self._has_camera_scope(user, "can_manage")
+        m = self._get_membership(user)
+        return m is not None and m.role == 'admin'
 
     def is_media_viewable_by(self, user):
-        """Xem ảnh của camera này: cần role perm media.view + scope can_view."""
+        """Xem ảnh/media: bất kỳ thành viên nào trong client."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff:
             return True
-        if not self._has_role_perm(user, "media.view"):
-            return False
-        return self._has_camera_scope(user, "can_view")
+        return self._get_membership(user) is not None
 
     def is_media_downloadable_by(self, user):
+        """Tải ảnh: thành viên có can_download=True."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff:
             return True
-        if not self._has_role_perm(user, "media.download"):
-            return False
-        return self._has_camera_scope(user, "can_download")
+        m = self._get_membership(user)
+        return m is not None and m.can_download
 
     def is_media_deletable_by(self, user):
+        """Xóa ảnh: chỉ client admin."""
         if not user or not user.is_authenticated:
             return False
         if user.is_staff:
             return True
-        if not self._has_role_perm(user, "media.delete"):
-            return False
-        return self._has_camera_scope(user, "can_delete_media")
+        m = self._get_membership(user)
+        return m is not None and m.role == 'admin'
 
-    # -- helpers nội bộ ------------------------------------------------- #
+    # -- helper nội bộ -------------------------------------------------- #
 
-    def _has_role_perm(self, user, perm_code):
-        from core.models.permission import UserRole
-        return UserRole.objects.filter(
-            user=user,
-            role__role_permissions__permission__code=perm_code,
-        ).exists()
-
-    def _has_camera_scope(self, user, field):
+    def _get_membership(self, user):
+        """Trả ClientMembership nếu camera thuộc client của user, ngược lại None."""
         if not self.site_id or not self.site or not self.site.client_id:
-            return False
+            return None
         from core.models.permission import ClientMembership
-        m = ClientMembership.objects.filter(user=user, client_id=self.site.client_id).first()
-        if not m:
-            return False
-        if field == "can_download":
-            return m.can_download
-        return True
+        return ClientMembership.objects.filter(
+            user=user, client_id=self.site.client_id
+        ).first()
 
 
 class CameraCredential(models.Model):

@@ -9,36 +9,43 @@ from django.views.decorators.http import require_POST
 from core.forms import CameraForm, SiteForm
 from core.models.camera import AlertSettings, Camera, CameraCredential, Site
 from core.models.media import Media, MediaDayStat, VideoRender
-from core.models.permission import UserRole
+from core.models.permission import ClientMembership
 
 _PAGE_SIZE = 20
 
 
 # ── permission helpers ────────────────────────────────────────────────────────
 
+def _get_membership(user):
+    if not user or not user.is_authenticated or user.is_staff:
+        return None
+    return ClientMembership.objects.select_related('client').filter(user=user).first()
+
+
 def _has_perm(user, perm_code):
+    """Map permission code sang ClientMembership role."""
     if user.is_staff:
         return True
-    return UserRole.objects.filter(
-        user=user,
-        role__role_permissions__permission__code=perm_code,
-    ).exists()
+    m = _get_membership(user)
+    if not m:
+        return False
+    # view perms: any member; manage/add/delete/assign: admin only
+    if perm_code in ('camera.view', 'media.view'):
+        return True
+    return m.role == 'admin'
 
 
 def _camera_qs(user):
-    """Cameras user được phép xem (deny-by-default)."""
+    """Cameras user được phép xem."""
     if user.is_staff:
         return Camera.objects.select_related("site", "device").order_by("code")
-    if not _has_perm(user, "camera.view"):
-        return Camera.objects.none()
-    from core.models.permission import ClientMembership
-    membership = ClientMembership.objects.filter(user=user).first()
-    if not membership:
+    m = _get_membership(user)
+    if not m:
         return Camera.objects.none()
     return (
         Camera.objects.select_related("site", "device")
-        .filter(site__client=membership.client)
-        .order_by("code").distinct()
+        .filter(site__client=m.client)
+        .order_by("code")
     )
 
 

@@ -9,15 +9,18 @@ from django.views.decorators.http import require_POST
 
 from core.models.camera import Camera, Client, Site
 from core.models.media import Media
-from core.models.permission import UserRole
+from core.models.permission import ClientMembership
 
 
 def _has_perm(user, code):
     if user.is_staff:
         return True
-    return UserRole.objects.filter(
-        user=user, role__role_permissions__permission__code=code
-    ).exists()
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return False
+    if code in ('camera.view', 'media.view'):
+        return True
+    return m.role == 'admin'
 
 
 def _is_ajax(request):

@@ -10,16 +10,19 @@ from django.views.decorators.http import require_POST
 
 from core.models.camera import Camera
 from core.models.media import VideoRender
-from core.models.permission import UserRole
+from core.models.permission import ClientMembership
 from core.utils import storage
 
 
 def _has_perm(user, code):
     if user.is_staff:
         return True
-    return UserRole.objects.filter(
-        user=user, role__role_permissions__permission__code=code
-    ).exists()
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return False
+    if code in ('camera.view', 'media.view', 'media.download'):
+        return True
+    return m.role == 'admin'
 
 
 def _can_view_camera(user, camera):
@@ -96,7 +99,8 @@ def render_status(request, pk):
     }
     if vr.status == VideoRender.Status.READY and vr.output_key:
         try:
-            data["download_url"] = storage.presigned_get_url(vr.output_key, expire=3600)
+            _rs = "r2" if storage._r2_enabled() else None
+            data["download_url"] = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
         except Exception:
             pass
 
@@ -113,7 +117,8 @@ def render_download(request, pk):
         return JsonResponse({"error": "Video chưa sẵn sàng."}, status=400)
 
     try:
-        url = storage.presigned_get_url(vr.output_key, expire=3600)
+        _rs = "r2" if storage._r2_enabled() else None
+        url = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)
 
@@ -137,7 +142,8 @@ def render_list(request):
         download_url = None
         if vr.status == VideoRender.Status.READY and vr.output_key:
             try:
-                download_url = storage.presigned_get_url(vr.output_key, expire=3600)
+                _rs = "r2" if storage._r2_enabled() else None
+                download_url = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
             except Exception:
                 pass
         render_rows.append({"vr": vr, "download_url": download_url})

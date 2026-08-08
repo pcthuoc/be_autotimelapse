@@ -288,7 +288,8 @@ GENERIC = {
 # ── Registry — tra cứu bằng Camera.camera_model ───────────────────────────────
 CAMERA_SPECS: dict[str, dict] = {
     "nikon_d5300": NIKON_D5300,
-    "nikon_d3500": NIKON_D5300,   # D3500 tương tự D5300 — dùng tạm cùng profile
+    "nikon_d3500": NIKON_D5300,   # D3500 tương tự D5300 — dùng cùng profile
+    "nikon_d7100": NIKON_D5300,   # D7100 cùng dải ISO/shutter với D5300
     "nikon_d7500": GENERIC,       # chưa có profile riêng
     "nikon_z50":   GENERIC,
     "canon_200d":  GENERIC,

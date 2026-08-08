@@ -1,11 +1,12 @@
 """
-Helper kết nối SeaweedFS qua giao thức S3 (boto3).
+Dual-backend storage helper: SeaweedFS (hot) và Cloudflare R2 (primary/cold).
 
 Django KHÔNG serve file. Nó chỉ:
   1. Kiểm tra quyền (object-level permission).
-  2. Sinh presigned URL để browser tải trực tiếp từ SeaweedFS.
+  2. Sinh presigned URL để browser tải trực tiếp.
 
-Tách riêng ở đây để sau này đổi sang Cloudflare R2 chỉ cần sửa 1 chỗ.
+Routing: dựa vào media.storage ("seaweed" | "r2").
+Tất cả hàm đều nhận tham số storage=None (mặc định: "seaweed").
 """
 
 import hashlib
@@ -17,9 +18,8 @@ from django.conf import settings
 from django.core.cache import cache
 
 
-def _make_client(endpoint_url):
+def _make_client(endpoint_url, cfg):
     """Tạo boto3 S3 client với endpoint_url chỉ định."""
-    cfg = settings.SEAWEED
     return boto3.client(
         "s3",
         endpoint_url=endpoint_url,
@@ -33,10 +33,12 @@ def _make_client(endpoint_url):
     )
 
 
+# ── SeaweedFS clients ─────────────────────────────────────────────────────────
+
 @lru_cache(maxsize=1)
 def _client():
     """boto3 S3 client trỏ tới SeaweedFS gateway nội bộ (cache 1 instance)."""
-    return _make_client(settings.SEAWEED["ENDPOINT_URL"])
+    return _make_client(settings.SEAWEED["ENDPOINT_URL"], settings.SEAWEED)
 
 
 @lru_cache(maxsize=1)
@@ -51,11 +53,32 @@ def _presign_client():
     cfg = settings.SEAWEED
     public = cfg.get("PUBLIC_ENDPOINT_URL")
     endpoint = public if public else cfg["ENDPOINT_URL"]
-    return _make_client(endpoint)
+    return _make_client(endpoint, cfg)
 
 
 def _bucket():
     return settings.SEAWEED["BUCKET"]
+
+
+# ── Cloudflare R2 clients ────────────────────────────────────────────────────────
+
+def _r2_enabled():
+    return bool(getattr(settings, "R2", {}).get("ENDPOINT_URL"))
+
+
+@lru_cache(maxsize=1)
+def _r2_client():
+    cfg = settings.R2
+    r2_cfg = {**cfg, "ADDRESSING_STYLE": "path", "REGION": cfg.get("REGION", "auto")}
+    return _make_client(cfg["ENDPOINT_URL"], r2_cfg)
+
+
+def _r2_bucket():
+    return settings.R2["BUCKET"]
+
+
+def _r2_output_bucket():
+    return settings.R2.get("OUTPUT_BUCKET", settings.R2["BUCKET"])
 
 
 def ensure_bucket():
@@ -81,18 +104,20 @@ def ensure_bucket():
     return bucket
 
 
-def presigned_get_url(key, expire=None, download_name=None, inline_content_type=None):
+def presigned_get_url(key, expire=None, download_name=None, inline_content_type=None, storage=None, r2_output=False):
     """
     Sinh presigned URL (GET) cho 1 object.
-
-    :param key: key trong bucket.
-    :param expire: số giây hết hạn (mặc định lấy từ settings).
-    :param download_name: nếu set → ép trình duyệt tải về với tên file này.
-    :param inline_content_type: nếu set → ép Content-Type (vd 'video/mp4') và
-        Content-Disposition=inline để phát trực tiếp trên trình duyệt.
+    storage=None | "seaweed" → SeaweedFS.  storage="r2" → Cloudflare R2.
+    r2_output=True → dùng R2_OUTPUT_BUCKET (atl-output) thay vì R2_BUCKET (atl-media).
     """
     if not key:
         return None
+    if storage == "r2":
+        bucket = _r2_output_bucket() if r2_output else _r2_bucket()
+        return _presigned_get_r2(key, expire=expire,
+                                  download_name=download_name,
+                                  inline_content_type=inline_content_type,
+                                  bucket=bucket)
     cfg = settings.SEAWEED
     params = {"Bucket": _bucket(), "Key": key}
     if download_name:
@@ -109,38 +134,53 @@ def presigned_get_url(key, expire=None, download_name=None, inline_content_type=
     )
 
 
+def _presigned_get_r2(key, expire=None, download_name=None, inline_content_type=None, bucket=None):
+    """Sinh presigned GET URL trực tiếp từ R2 (hoặc public domain nếu có)."""
+    cfg = settings.R2
+    public = cfg.get("PUBLIC_DOMAIN")
+    if public:
+        return f"https://{public.rstrip('/')}/{key}"
+    params = {"Bucket": bucket or _r2_bucket(), "Key": key}
+    if download_name:
+        params["ResponseContentDisposition"] = f'attachment; filename="{download_name}"'
+    elif inline_content_type:
+        params["ResponseContentType"] = inline_content_type
+        params["ResponseContentDisposition"] = "inline"
+    return _r2_client().generate_presigned_url(
+        "get_object", Params=params, ExpiresIn=expire or cfg["PRESIGN_EXPIRE"]
+    )
+
+
 # ── Presigned URL cache (Redis pull-through) ──────────────────────────────────
 
 _PRESIGN_CACHE_RATIO = 0.85  # cache 85% TTL → URL trả ra luôn còn ít nhất 9 phút hạn
 
 
-def _presign_cache_key(key, ttl_bucket):
+def _presign_cache_key(key, ttl_bucket, download_name=None):
     """Tạo Redis key ổn định cho 1 s3 key + TTL bucket."""
-    raw = f"presign:{_bucket()}:{key}:{ttl_bucket}"
+    raw = f"presign:{_bucket()}:{key}:{ttl_bucket}:{download_name or ''}"
     return "psurl:" + hashlib.md5(raw.encode()).hexdigest()
 
 
-def presigned_get_url_cached(key, expire=None, **kwargs):
+def presigned_get_url_cached(key, expire=None, storage=None, **kwargs):
     """
     Sinh presigned GET URL với cache Redis (pull-through).
-
-    Khi user vào gallery trang N:
-      - Lần đầu (cache MISS) → boto3 ký URL → lưu Redis {TTL × 85%} giây
-      - Lần sau trong cùng cửa sổ TTL (cache HIT) → trả luôn từ Redis ~2ms
-      - Sau khi cache hết hạn → lần sau sẽ ký lại URL mới
+    storage=None | "seaweed" → SeaweedFS.  storage="r2" → Cloudflare R2.
     """
     if not key:
         return None
-    ttl = expire or settings.SEAWEED["PRESIGN_EXPIRE"]
-    # Làm tròn xuống 600s để các URL trong cùng time-window dùng chung cache key
+    # R2 public domain: trả URL tĩnh, không cần cache
+    if storage == "r2" and getattr(settings, "R2", {}).get("PUBLIC_DOMAIN"):
+        return _presigned_get_r2(key, **kwargs)
+    ttl = expire or (settings.R2 if storage == "r2" else settings.SEAWEED)["PRESIGN_EXPIRE"]
     ttl_bucket = (ttl // 600) * 600
-    c_key = _presign_cache_key(key, ttl_bucket)
+    c_key = _presign_cache_key(key, ttl_bucket, download_name=kwargs.get('download_name'))
 
     cached = cache.get(c_key)
     if cached:
         return cached
 
-    url = presigned_get_url(key, expire=ttl, **kwargs)
+    url = presigned_get_url(key, expire=ttl, storage=storage, **kwargs)
     if url:
         cache.set(c_key, url, timeout=int(ttl * _PRESIGN_CACHE_RATIO))
     return url
@@ -155,8 +195,17 @@ def _invalidate_presign_cache_key(key, expire=None):
     cache.delete(_presign_cache_key(key, ttl_bucket))
 
 
-def presigned_put_url(key, content_type="image/jpeg", expire=None):
-    """Sinh presigned URL (PUT) để thiết bị camera upload trực tiếp."""
+def presigned_put_url(key, content_type="image/jpeg", expire=None, storage=None):
+    """Sinh presigned URL (PUT) để thiết bị camera upload trực tiếp.
+    storage=None | "seaweed" → SeaweedFS.  storage="r2" → Cloudflare R2.
+    """
+    if storage == "r2":
+        cfg = settings.R2
+        return _r2_client().generate_presigned_url(
+            "put_object",
+            Params={"Bucket": _r2_bucket(), "Key": key, "ContentType": content_type},
+            ExpiresIn=expire or cfg["PRESIGN_EXPIRE"],
+        )
     cfg = settings.SEAWEED
     return _presign_client().generate_presigned_url(
         "put_object",
@@ -165,43 +214,53 @@ def presigned_put_url(key, content_type="image/jpeg", expire=None):
     )
 
 
-def head_size(key):
+def head_size(key, storage=None):
     """HEAD 1 object: trả size_bytes nếu tồn tại, None nếu không."""
     if not key:
         return None
     try:
-        resp = _client().head_object(Bucket=_bucket(), Key=key)
+        if storage == "r2":
+            resp = _r2_client().head_object(Bucket=_r2_bucket(), Key=key)
+        else:
+            resp = _client().head_object(Bucket=_bucket(), Key=key)
         return int(resp.get("ContentLength", 0))
-    except Exception:  # noqa: BLE001 - not found / lỗi mạng
+    except Exception:  # noqa: BLE001
         return None
 
 
-def put_bytes(key, data, content_type="image/jpeg"):
+def put_bytes(key, data, content_type="image/jpeg", storage=None):
     """Upload bytes trực tiếp (dùng cho seed / thumbnail sinh phía backend)."""
-    _client().put_object(
-        Bucket=_bucket(), Key=key, Body=data, ContentType=content_type
-    )
+    if storage == "r2":
+        _r2_client().put_object(Bucket=_r2_bucket(), Key=key, Body=data, ContentType=content_type)
+    else:
+        _client().put_object(Bucket=_bucket(), Key=key, Body=data, ContentType=content_type)
     return key
 
 
-def download_bytes(key):
-    """Đọc toàn bộ 1 object từ SeaweedFS về bytes."""
-    obj = _client().get_object(Bucket=_bucket(), Key=key)
+def download_bytes(key, storage=None):
+    """Dọc toàn bộ 1 object về bytes."""
+    if storage == "r2":
+        obj = _r2_client().get_object(Bucket=_r2_bucket(), Key=key)
+    else:
+        obj = _client().get_object(Bucket=_bucket(), Key=key)
     return obj["Body"].read()
 
 
-def delete_key(key):
-    """Xoá 1 object (dùng khi archive hết hạn)."""
-    if key:
+def delete_key(key, storage=None):
+    """Xoá 1 object (dùng khi archive hết hạn hoặc media bị xóa)."""
+    if not key:
+        return
+    if storage == "r2":
+        _r2_client().delete_object(Bucket=_r2_bucket(), Key=key)
+    else:
         _client().delete_object(Bucket=_bucket(), Key=key)
 
 
 def build_archive_zip(entries, zip_key, progress_cb=None):
     """
-    Gói nhiều ảnh thành 1 ZIP rồi upload lại SeaweedFS.
+    Gói nhiều ảnh thành 1 ZIP rồi upload lên R2 output (hoặc SeaweedFS nếu chưa có R2).
 
-    :param entries: list (arcname, s3_key). ZIP_STORED vì JPEG đã nén sẵn
-                    (không nén lại → nhanh, ít CPU).
+    :param entries: list (arcname, s3_key, storage_type). ZIP_STORED vì JPEG đã nén sẵn.
     :param zip_key: key đích của file zip trên bucket.
     :param progress_cb: callback(i) gọi sau mỗi ảnh (để cập nhật tiến độ).
     :return: (size_bytes, item_count).
@@ -210,26 +269,35 @@ def build_archive_zip(entries, zip_key, progress_cb=None):
     import tempfile
     import zipfile
 
+    out_storage = "r2" if _r2_enabled() else "seaweed"
     count = 0
     fd, tmp_path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
     try:
         with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED) as zf:
-            for i, (arcname, key) in enumerate(entries):
+            for entry in entries:
+                arcname, key = entry[0], entry[1]
+                src_storage = entry[2] if len(entry) > 2 else None
                 try:
-                    data = download_bytes(key)
+                    data = download_bytes(key, storage=src_storage)
                 except Exception:
-                    continue  # bỏ qua ảnh lỗi, không làm sập cả gói
+                    continue
                 zf.writestr(arcname, data)
                 count += 1
                 if progress_cb:
                     progress_cb(count)
         size = os.path.getsize(tmp_path)
         with open(tmp_path, "rb") as fh:
-            _client().upload_fileobj(
-                fh, _bucket(), zip_key,
-                ExtraArgs={"ContentType": "application/zip"},
-            )
+            if out_storage == "r2":
+                _r2_client().upload_fileobj(
+                    fh, _r2_output_bucket(), zip_key,
+                    ExtraArgs={"ContentType": "application/zip"},
+                )
+            else:
+                _client().upload_fileobj(
+                    fh, _bucket(), zip_key,
+                    ExtraArgs={"ContentType": "application/zip"},
+                )
         return size, count
     finally:
         try:

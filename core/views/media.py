@@ -37,11 +37,14 @@ _THUMB_TTL = 3600  # presigned thumbnail sống 1h
 def _viewable_cameras(user):
     if user.is_staff:
         return Camera.objects.select_related("site").order_by("code")
+    from core.models.permission import ClientMembership
+    m = ClientMembership.objects.filter(user=user).first()
+    if not m:
+        return Camera.objects.none()
     return (
         Camera.objects.select_related("site")
-        .filter(user_accesses__user=user, user_accesses__can_view=True)
+        .filter(site__client=m.client)
         .order_by("code")
-        .distinct()
     )
 
 
@@ -326,7 +329,13 @@ def media_archive_download(request, pk):
     if archive.status != MediaArchive.Status.READY or archive.is_expired:
         raise Http404
     name = f"{archive.camera.code}_{archive.created_at:%Y%m%d_%H%M%S}.zip"
-    url = storage.presigned_get_url(archive.zip_key, download_name=name)
+    zip_storage = "r2" if storage._r2_enabled() else None
+    url = storage.presigned_get_url(
+        archive.zip_key,
+        download_name=name,
+        storage=zip_storage,
+        r2_output=bool(zip_storage),
+    )
     if not url:
         raise Http404
     return HttpResponseRedirect(url)
@@ -370,7 +379,8 @@ def downloads_panel_data(request):
         dl_url = None
         if vr.status == VideoRender.Status.READY and vr.output_key:
             try:
-                dl_url = _storage.presigned_get_url(vr.output_key, expire=3600)
+                _rs = "r2" if _storage._r2_enabled() else None
+                dl_url = _storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
             except Exception:
                 pass
         renders.append({

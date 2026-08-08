@@ -21,10 +21,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-u_am=8by79nhqo9p@msu21tm5v$nwlrvau@d3(z)qx-fog$%a!'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-u_am=8by79nhqo9p@msu21tm5v$nwlrvau@d3(z)qx-fog$%a!')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', '1') == '1'
+DEBUG = os.environ.get('DEBUG', '0') == '1'
 
 _allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '*').strip()
 _hosts_list = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
@@ -131,13 +131,11 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD', 'atl_pass_2026'),
         'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
         'PORT': os.environ.get('DB_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
     }
 }
 
 # ── SeaweedFS / S3 object storage ─────────────────────────────────────────────
-# Backend + SeaweedFS chạy chung 1 VPS. Django KHÔNG serve file, chỉ tạo
-# presigned URL để browser tải trực tiếp từ SeaweedFS (giảm tải Django).
-# Override credential thật trong local_settings.py.
 SEAWEED = {
     "ENDPOINT_URL": os.environ.get('SEAWEED_ENDPOINT_URL', 'http://127.0.0.1:8333'),   # S3 gateway nội bộ
     "PUBLIC_ENDPOINT_URL": os.environ.get('SEAWEED_PUBLIC_ENDPOINT_URL', '') or None,   # URL public cho presigned (browser/device)
@@ -145,9 +143,26 @@ SEAWEED = {
     "SECRET_KEY": "ApiTL2026SecretXyz",
     "BUCKET": "media",
     "REGION": "us-east-1",                       # SeaweedFS bỏ qua nhưng boto3 cần
-    "PRESIGN_EXPIRE": 3600,                       # URL ảnh hết hạn sau 1 giờ
-    "ADDRESSING_STYLE": "path",                   # SeaweedFS dùng path-style
+    "PRESIGN_EXPIRE": 3600,
+    "ADDRESSING_STYLE": "path",
 }
+
+# ── Cloudflare R2 (Primary Storage) ───────────────────────────────────────────
+# Tất cả ảnh gốc + output (ZIP/video) lưu trên R2.
+# Để trống R2_ENDPOINT_URL → R2 disabled, hệ thống fallback về SeaweedFS.
+R2 = {
+    "ENDPOINT_URL":   os.environ.get("R2_ENDPOINT_URL", ""),     # https://<account>.r2.cloudflarestorage.com
+    "ACCESS_KEY":     os.environ.get("R2_ACCESS_KEY", ""),
+    "SECRET_KEY":     os.environ.get("R2_SECRET_KEY", ""),
+    "BUCKET":         os.environ.get("R2_BUCKET", "atl-media"),
+    "OUTPUT_BUCKET":  os.environ.get("R2_OUTPUT_BUCKET", "atl-output"),
+    "REGION":         "auto",
+    "PRESIGN_EXPIRE": 3600,
+    "PUBLIC_DOMAIN":  os.environ.get("R2_PUBLIC_DOMAIN", ""),     # custom domain tùy chọn
+}
+
+# Ảnh cũ hơn N ngày → migrate sang R2; thumbnail SeaweedFS cũng cleanup theo
+STORAGE_HOT_DAYS = int(os.environ.get("STORAGE_HOT_DAYS", "30"))
 
 
 # ── Redis: cache + Celery broker (hệ thống lớn, tác vụ nặng chạy nền) ──────────
@@ -180,6 +195,22 @@ CELERY_TASK_ROUTES = {
     "core.tasks.build_media_archive":      {"queue": "archive"},
     "core.tasks.cleanup_expired_archives": {"queue": "default"},
     "core.tasks.render_timelapse_video":   {"queue": "render"},
+}
+
+from celery.schedules import crontab  # noqa: E402
+CELERY_BEAT_SCHEDULE = {
+    "cleanup-expired-archives": {
+        "task": "core.tasks.cleanup_expired_archives",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "cleanup-expired-renders": {
+        "task": "core.tasks.cleanup_expired_renders",
+        "schedule": crontab(hour=3, minute=30),
+    },
+    "migrate-cold-to-r2": {
+        "task": "core.tasks.migrate_cold_to_r2",
+        "schedule": crontab(hour=2, minute=0),  # chạy trước cleanup để không xóa file đang migrate
+    },
 }
 
 # ── MQTT: giao tiếp với trạm camera (Mosquitto + Dynamic Security) ──────────
@@ -216,6 +247,7 @@ PROFILE_SETTINGS = {
 _cur_prof = PROFILE_SETTINGS.get(SYSTEM_PROFILE, PROFILE_SETTINGS["LOW"])
 
 MEDIA_ARCHIVE_TTL_HOURS = 24
+VIDEO_RENDER_TTL_DAYS = int(_os.environ.get("VIDEO_RENDER_TTL_DAYS", 7))
 MEDIA_ARCHIVE_MAX_ITEMS = int(_os.environ.get("MEDIA_ARCHIVE_MAX_ITEMS", _cur_prof["MEDIA_ARCHIVE_MAX_ITEMS"]))
 RENDER_CHUNK_SIZE = int(_os.environ.get("RENDER_CHUNK_SIZE", _cur_prof["RENDER_CHUNK_SIZE"]))
 FFMPEG_THREADS = int(_os.environ.get("FFMPEG_THREADS", _cur_prof["FFMPEG_THREADS"]))

@@ -198,6 +198,7 @@ class VideoRender(models.Model):
         PROCESSING = "processing", "Processing"
         READY      = "ready",      "Ready"
         FAILED     = "failed",     "Failed"
+        EXPIRED    = "expired",    "Expired"
 
     class Resolution(models.TextChoices):
         R_4K   = "3840x2160", "4K (3840×2160)"
@@ -247,6 +248,7 @@ class VideoRender(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     ready_at   = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Video render"
