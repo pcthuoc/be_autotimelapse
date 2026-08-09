@@ -369,6 +369,12 @@ def api_camera_settings(request, pk):
         changed = [f for f in updatable if f in request.data and not setattr(cam_settings, f, request.data[f])]
         if changed:
             cam_settings.save(update_fields=changed + (['updated_at'] if hasattr(cam_settings, 'updated_at') else []))
+            # Push settings xuống Pi qua MQTT để đồng bộ với máy ảnh thật
+            try:
+                from mqtt_service import config_publisher
+                config_publisher.push_settings(cam_settings)
+            except Exception:
+                pass  # Không block response nếu MQTT lỗi
 
     from core.camera_specs import get_spec
     profile = get_spec(cam.camera_model or 'generic')
