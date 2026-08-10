@@ -108,15 +108,29 @@ def _handle_status(code, payload):
         device.save(update_fields=["last_seen_at", "updated_at"])
         was_online = cache.get(f"cam:online:{code}")
         cache.set(f"cam:online:{code}", True, ONLINE_TTL)
-        # Thiết bị vừa (re)connect → đồng bộ capture interval xuống
-        if not was_online and device.capture_interval_sec:
+        # Thiết bị vừa (re)connect → đồng bộ schedules & capture interval xuống
+        if not was_online:
             from mqtt_service import config_publisher
             try:
-                config_publisher.push_interval(code, device.capture_interval_sec)
-                log.info("Đã đẩy capture_interval=%ds xuống %s",
-                         device.capture_interval_sec, code)
+                schedules_qs = camera.schedules.all()
+                schedules_list = [
+                    {
+                        "id": str(s.id),
+                        "name": s.name,
+                        "is_enabled": s.is_enabled,
+                        "start_time": s.start_time,
+                        "end_time": s.end_time,
+                        "interval_sec": s.interval_sec,
+                        "days_of_week": s.days_of_week,
+                    }
+                    for s in schedules_qs
+                ]
+                config_publisher.push_schedules(code, schedules_list)
+                if device.capture_interval_sec:
+                    config_publisher.push_interval(code, device.capture_interval_sec)
+                log.info("Đã đẩy %d schedules & interval xuống %s", len(schedules_list), code)
             except Exception:
-                log.exception("push_interval lỗi cho %s", code)
+                log.exception("Lỗi đẩy schedules/interval cho %s", code)
     else:
         # LWT/thông báo offline rõ ràng → ghi False để UI không fallback
         # sang last_seen_at (vốn có thể vẫn trong cửa sổ online).
