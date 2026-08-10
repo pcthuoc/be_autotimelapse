@@ -170,11 +170,11 @@ def api_camera_live_latest(request, pk):
     from core.utils import storage as _st
     fname = f"{cam.code}_{media.taken_at.strftime('%Y%m%d_%H%M%S')}.jpg"
     try:
-        thumb_url = _st.presigned_get_url(media.effective_thumb_key, expire=3600)
+        thumb_url = _st.presigned_get_url(media.effective_thumb_key, expire=3600, storage='seaweed')
     except Exception:
         thumb_url = None
     try:
-        view_url = _st.presigned_get_url(media.s3_key, expire=3600)
+        view_url = _st.presigned_get_url(media.s3_key, expire=3600, storage=media.storage)
     except Exception:
         view_url = None
     try:
@@ -240,13 +240,34 @@ def api_camera_device_update(request, pk):
         dev.capture_interval_sec = interval
         updates.append('capture_interval_sec')
 
+    if 'schedule_enabled' in request.data:
+        dev.schedule_enabled = bool(request.data['schedule_enabled'])
+        updates.append('schedule_enabled')
+
+    if 'work_start_time' in request.data:
+        st = str(request.data['work_start_time']).strip()
+        if len(st) == 5 and ':' in st:
+            dev.work_start_time = st
+            updates.append('work_start_time')
+
+    if 'work_end_time' in request.data:
+        et = str(request.data['work_end_time']).strip()
+        if len(et) == 5 and ':' in et:
+            dev.work_end_time = et
+            updates.append('work_end_time')
+
     if not updates:
         return Response({'detail': 'No updatable fields'}, status=400)
     dev.save(update_fields=updates)
     try:
         from mqtt_service import config_publisher
-        if 'capture_interval_sec' in updates:
-            config_publisher.push_interval(cam.code, dev.capture_interval_sec)
+        config_publisher.push_interval(
+            cam.code,
+            dev.capture_interval_sec,
+            dev.schedule_enabled,
+            dev.work_start_time,
+            dev.work_end_time,
+        )
     except Exception:
         pass
     return Response(device_to_dict(dev))
@@ -408,3 +429,77 @@ def api_camera_settings(request, pk):
         'applied': cam_settings.applied or {}, 'in_sync': getattr(cam_settings, 'in_sync', False),
         'last_synced_at': cam_settings.last_synced_at.isoformat() if cam_settings.last_synced_at else None,
     })
+
+
+def _push_camera_schedules(camera):
+    try:
+        from mqtt_service import config_publisher
+        schedules = [s.to_dict() for s in camera.schedules.all()]
+        config_publisher.push_schedules(camera.code, schedules)
+    except Exception:
+        pass
+
+
+@api_view(['GET', 'POST'])
+def api_camera_schedules(request, pk):
+    from core.models import CameraSchedule
+    try:
+        cam = Camera.objects.get(pk=pk)
+    except Camera.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+    if not user_can_access_camera(request.user, cam):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    if request.method == 'GET':
+        schedules = cam.schedules.all()
+        return Response({'results': [s.to_dict() for s in schedules]})
+
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    name = str(request.data.get('name') or 'Khung giờ chụp').strip()
+    start_time = str(request.data.get('start_time') or '07:00').strip()
+    end_time = str(request.data.get('end_time') or '17:00').strip()
+    interval_sec = int(request.data.get('interval_sec') or 300)
+    is_enabled = bool(request.data.get('is_enabled', True))
+    days_of_week = request.data.get('days_of_week') or [1, 2, 3, 4, 5, 6, 7]
+
+    sched = CameraSchedule.objects.create(
+        camera=cam,
+        name=name,
+        start_time=start_time,
+        end_time=end_time,
+        interval_sec=max(30, min(86400, interval_sec)),
+        is_enabled=is_enabled,
+        days_of_week=days_of_week,
+    )
+    _push_camera_schedules(cam)
+    return Response(sched.to_dict(), status=201)
+
+
+@api_view(['PATCH', 'DELETE'])
+def api_camera_schedule_detail(request, pk, schedule_id):
+    from core.models import CameraSchedule
+    try:
+        cam = Camera.objects.get(pk=pk)
+        sched = CameraSchedule.objects.get(pk=schedule_id, camera=cam)
+    except (Camera.DoesNotExist, CameraSchedule.DoesNotExist):
+        return Response({'detail': 'Not found'}, status=404)
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+
+    if request.method == 'DELETE':
+        sched.delete()
+        _push_camera_schedules(cam)
+        return Response(status=204)
+
+    updatable = ['name', 'is_enabled', 'start_time', 'end_time', 'interval_sec', 'days_of_week']
+    for f in updatable:
+        if f in request.data:
+            if f == 'interval_sec':
+                setattr(sched, f, max(30, min(86400, int(request.data[f]))))
+            else:
+                setattr(sched, f, request.data[f])
+    sched.save()
+    _push_camera_schedules(cam)
+    return Response(sched.to_dict())

@@ -1,8 +1,13 @@
 """Shared helpers dùng chung cho tất cả api_views modules."""
 from django.utils import timezone
+from django.core.cache import cache
 
 from core.models import Camera, Media, Site
 from core.models.camera import CameraDevice
+
+# Ngưỡng fallback (giây) khi Redis cache miss — phải khớp với ONLINE_TTL (1800s)
+# để không báo offline sai cho camera gửi data mỗi 15–20 phút.
+_ONLINE_FALLBACK_SEC = 1800
 
 
 def camera_to_dict(cam, request=None):
@@ -10,7 +15,7 @@ def camera_to_dict(cam, request=None):
     try:
         from core.utils import storage as _st
         latest = Media.objects.filter(camera=cam).order_by('-taken_at').first()
-        thumb_url = _st.presigned_get_url(latest.effective_thumb_key, expire=3600) if latest else None
+        thumb_url = _st.presigned_get_url(latest.effective_thumb_key, expire=3600, storage='seaweed') if latest else None
     except Exception:
         thumb_url = None
     return {
@@ -69,18 +74,36 @@ def device_to_dict(dev):
         'humidity_percent': getattr(dev, 'humidity_percent', None),
         'firmware_version': getattr(dev, 'firmware_version', '') or '',
         'capture_interval_sec': getattr(dev, 'capture_interval_sec', None),
+        'schedule_enabled': getattr(dev, 'schedule_enabled', False),
+        'work_start_time': getattr(dev, 'work_start_time', '06:00') or '06:00',
+        'work_end_time': getattr(dev, 'work_end_time', '18:00') or '18:00',
         'signal_bars': bars,
         'signal_label': label,
     }
 
 
 def is_online(device):
+    """Kiểm tra camera có online không.
+
+    Ưu tiên Redis cache (cam:online:<code>) do MQTT listener set/clear.
+    Nếu cache miss (Redis không có key), fallback về last_seen_at với
+    ngưỡng rộng (_ONLINE_FALLBACK_SEC) để tránh báo offline sai cho camera
+    gửi telemetry mỗi 4–5 phút.
+    """
     if not device:
         return False
+    try:
+        code = device.camera.code
+        cached = cache.get(f"cam:online:{code}")
+        if cached is not None:
+            return bool(cached)
+    except Exception:
+        pass
+    # Fallback: dùng last_seen_at với ngưỡng rộng hơn interval của thiết bị
     last_seen = getattr(device, 'esp32_last_seen_at', None) or device.last_seen_at
     if not last_seen:
         return False
-    return (timezone.now() - last_seen).total_seconds() < 300
+    return (timezone.now() - last_seen).total_seconds() < _ONLINE_FALLBACK_SEC
 
 
 def get_user_membership(user):

@@ -276,6 +276,15 @@ class CameraDevice(models.Model):
     capture_interval_sec = models.PositiveIntegerField(
         default=3600, help_text="Chu kỳ chụp ảnh (giây)."
     )
+    schedule_enabled = models.BooleanField(
+        default=False, help_text="Bật/Tắt lịch chụp theo khung giờ."
+    )
+    work_start_time = models.CharField(
+        max_length=5, default="06:00", help_text="Giờ bắt đầu chụp (HH:MM)."
+    )
+    work_end_time = models.CharField(
+        max_length=5, default="18:00", help_text="Giờ kết thúc chụp (HH:MM)."
+    )
     wake_requested_at = models.DateTimeField(
         null=True, blank=True,
         help_text="Thời điểm yêu cầu thiết bị chụp ngay (đánh thức).",
@@ -589,6 +598,44 @@ class AlertSettings(models.Model):
     notify_email = models.EmailField(
         blank=True, verbose_name="Email nhận cảnh báo"
     )
+
+
+class CameraSchedule(models.Model):
+    """Lịch hẹn giờ chụp ảnh theo khung giờ cho Camera."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    camera = models.ForeignKey(
+        Camera, on_delete=models.CASCADE, related_name="schedules", db_index=True
+    )
+    name = models.CharField(max_length=64, default="Khung giờ chụp")
+    is_enabled = models.BooleanField(default=True)
+    start_time = models.CharField(max_length=5, default="07:00", help_text="Giờ bắt đầu (HH:MM)")
+    end_time = models.CharField(max_length=5, default="17:00", help_text="Giờ kết thúc (HH:MM)")
+    interval_sec = models.PositiveIntegerField(default=300, help_text="Chu kỳ chụp (giây)")
+    days_of_week = models.JSONField(default=list, blank=True, help_text="Các ngày trong tuần [1..7]")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Lịch chụp Camera"
+        verbose_name_plural = "Lịch chụp Camera"
+        ordering = ("start_time",)
+
+    def __str__(self):
+        return f"{self.camera.code} - {self.name} ({self.start_time} - {self.end_time})"
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "camera_id": str(self.camera_id),
+            "name": self.name,
+            "is_enabled": self.is_enabled,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "interval_sec": self.interval_sec,
+            "days_of_week": self.days_of_week or [1, 2, 3, 4, 5, 6, 7],
+            "created_at": self.created_at.isoformat(),
+        }
 
     updated_at = models.DateTimeField(auto_now=True)
 

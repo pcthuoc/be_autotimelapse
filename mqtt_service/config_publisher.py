@@ -82,9 +82,18 @@ def request_capture(camera_code: str) -> str | None:
     return publish_command(camera_code, "capture_now")
 
 
-def push_interval(camera_code: str, interval_sec: int) -> str | None:
-    return publish_command(camera_code, "set_interval",
-                           {"capture_interval_sec": interval_sec})
+def push_interval(camera_code: str, interval_sec: int, schedule_enabled: bool = False,
+                  work_start_time: str = "06:00", work_end_time: str = "18:00") -> str | None:
+    return publish_command(camera_code, "set_interval", {
+        "capture_interval_sec": interval_sec,
+        "schedule_enabled": schedule_enabled,
+        "work_start_time": work_start_time,
+        "work_end_time": work_end_time,
+    })
+
+
+def push_schedules(camera_code: str, schedules: list) -> str | None:
+    return publish_command(camera_code, "set_schedules", {"schedules": schedules})
 
 
 def start_live_view(camera_code: str, session_id: str, fps: int = 1) -> str | None:

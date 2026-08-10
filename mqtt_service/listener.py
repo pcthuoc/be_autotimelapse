@@ -15,8 +15,9 @@ from mqtt_service.client import connect, make_client
 
 log = logging.getLogger(__name__)
 
-# TTL presence trên Redis (giây)
-ONLINE_TTL = 600
+# TTL presence trên Redis (giây).
+# Phải lớn hơn capture_interval tối đa của camera (thường 15–20 phút).
+ONLINE_TTL = 1800  # 30 phút
 
 
 def _dec(val):

@@ -1,4 +1,4 @@
-from core.models.camera import AlertSettings, Camera, CameraCredential, CameraDevice, CameraSettings, Client, Site
+from core.models.camera import AlertSettings, Camera, CameraCredential, CameraDevice, CameraSchedule, CameraSettings, Client, Site
 from core.models.media import Media, MediaArchive, MediaDayStat, VideoRender
 from core.models.permission import ClientMembership, Permission, Role, RolePermission, UserRole
 from core.models.profile import Profile
@@ -16,6 +16,7 @@ __all__ = [
     "CameraCredential",
     "CameraDevice",
     "CameraSettings",
+    "CameraSchedule",
     "AlertSettings",
     "Media",
     "MediaDayStat",
