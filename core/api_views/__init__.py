@@ -8,6 +8,7 @@ from .cameras import (
     api_camera_credentials, api_camera_simconfig,
     api_camera_power_on_cm4, api_camera_power_off_cm4,
     api_camera_mqtt_register, api_camera_settings,
+    api_camera_schedules, api_camera_schedule_detail,
 )
 from .sites import api_sites, api_site_detail, api_site_assign_client
 from .media import api_media_gallery, api_media_delete, api_media_bulk_delete, api_media_download
@@ -27,6 +28,7 @@ __all__ = [
     'api_camera_credentials', 'api_camera_simconfig',
     'api_camera_power_on_cm4', 'api_camera_power_off_cm4',
     'api_camera_mqtt_register', 'api_camera_settings',
+    'api_camera_schedules', 'api_camera_schedule_detail',
     'api_sites', 'api_site_detail', 'api_site_assign_client',
     'api_media_gallery', 'api_media_delete', 'api_media_bulk_delete', 'api_media_download',
     'api_renders', 'api_render_create', 'api_render_detail',
