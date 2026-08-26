@@ -5,6 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from core.models import Camera, Media, MediaDayStat
+from core.utils import storage as _st
 from ._helpers import user_can_access_camera
 
 
@@ -46,7 +47,6 @@ def api_media_gallery(request, camera_pk):
     pg = PageNumberPagination(); pg.page_size = 60
     page = pg.paginate_queryset(qs, request)
 
-    from core.utils import storage as _st
     photos = []
     for m in page:
         fname = f"{cam.code}_{m.taken_at.strftime('%Y%m%d_%H%M%S')}.jpg"
@@ -56,7 +56,9 @@ def api_media_gallery(request, camera_pk):
             'size_bytes': m.size_bytes,
             'width': m.width,
             'height': m.height,
-            'thumb_url': _st.presigned_get_url_cached(m.effective_thumb_key, expire=3600, storage='seaweed') or '',
+            'thumb_url': _st.presigned_get_url_cached(
+                m.effective_thumb_key, expire=3600, storage=m.effective_thumb_storage
+            ) or '',
             'view_url': _st.presigned_get_url_cached(m.s3_key, expire=3600, storage=m.storage) or '',
             'download_url': _st.presigned_get_url_cached(m.s3_key, expire=3600, download_name=fname, storage=m.storage) or '',
         })

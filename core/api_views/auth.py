@@ -4,27 +4,38 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 
 from ._helpers import get_user_membership, _user_perms
 
 User = get_user_model()
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@ensure_csrf_cookie
+def api_csrf(request):
+    return Response({'csrfToken': get_token(request)})
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@csrf_protect
 def api_login(request):
     user = authenticate(request, username=request.data.get('username', ''),
                         password=request.data.get('password', ''))
     if not user:
         return Response({'detail': 'Sai username hoặc password'}, status=status.HTTP_401_UNAUTHORIZED)
     auth_login(request, user)
-    if not request.data.get('remember', False):
+    if request.data.get('remember', False):
+        request.session.set_expiry(60 * 60 * 24 * 14)
+    else:
         request.session.set_expiry(0)
     return Response({'id': user.id, 'username': user.username, 'is_staff': user.is_staff})
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def api_logout(request):
     auth_logout(request)
     return Response({'ok': True})

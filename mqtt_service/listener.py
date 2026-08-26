@@ -43,6 +43,8 @@ def _get_device(code):
 
 def _handle_data(code, payload):
     """Telemetry: pin / solar / nhiệt ẩm / sóng SIM (đo đạc bởi CM4) & trạng thái nguồn 2 lõi."""
+    if not payload or not isinstance(payload, dict) or not any(k in payload for k in ("node", "cm4_power_state", "battery_percent", "battery_voltage", "temperature_c", "humidity_percent", "sim_signal_dbm", "solar_voltage")):
+        return
     camera, device = _get_device(code)
     if not device:
         return
@@ -103,9 +105,18 @@ def _handle_status(code, payload):
     if not device:
         return
     online = payload.get("online", payload.get("status") == "online")
+    now = timezone.now()
     if online:
-        device.last_seen_at = timezone.now()
-        device.save(update_fields=["last_seen_at", "updated_at"])
+        device.last_seen_at = now
+        fields = ["last_seen_at", "updated_at"]
+        node = payload.get("node")
+        cm4_state = payload.get("cm4_power_state")
+        if node == "cm4" or cm4_state == "running":
+            device.cm4_last_seen_at = now
+            device.cm4_power_state = "running"
+            fields.extend(["cm4_last_seen_at", "cm4_power_state"])
+
+        device.save(update_fields=fields)
         was_online = cache.get(f"cam:online:{code}")
         cache.set(f"cam:online:{code}", True, ONLINE_TTL)
         # Thiết bị vừa (re)connect → đồng bộ schedules & capture interval xuống
@@ -135,6 +146,9 @@ def _handle_status(code, payload):
         # LWT/thông báo offline rõ ràng → ghi False để UI không fallback
         # sang last_seen_at (vốn có thể vẫn trong cửa sổ online).
         cache.set(f"cam:online:{code}", False, ONLINE_TTL)
+        if payload.get("node") == "cm4":
+            device.cm4_power_state = "off"
+            device.save(update_fields=["cm4_power_state", "updated_at"])
 
 
 def _handle_ack(code, payload):
@@ -205,6 +219,19 @@ def _handle_ack(code, payload):
         device.last_seen_at = now
         device.save(update_fields=["wake_done_at", "last_seen_at", "updated_at"])
 
+    elif rtype in ("power_on_cm4", "power_on"):
+        device.cm4_power_state = data.get("cm4_power_state", "running")
+        device.cm4_last_seen_at = now
+        device.last_seen_at = now
+        device.save(update_fields=["cm4_power_state", "cm4_last_seen_at", "last_seen_at", "updated_at"])
+        cache.set(f"cam:ack:{code}:{payload.get('request_id', '')}", payload, 120)
+
+    elif rtype in ("power_off_cm4", "power_off"):
+        device.cm4_power_state = data.get("cm4_power_state", "off")
+        device.last_seen_at = now
+        device.save(update_fields=["cm4_power_state", "last_seen_at", "updated_at"])
+        cache.set(f"cam:ack:{code}:{payload.get('request_id', '')}", payload, 120)
+
     elif rtype == "set_interval":
         device.last_seen_at = now
         device.save(update_fields=["last_seen_at", "updated_at"])
@@ -235,8 +262,9 @@ def _on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
     except (ValueError, UnicodeDecodeError):
-        log.warning("Payload không phải JSON trên %s", msg.topic)
+        log.warning("Payload không phải JSON trên %s: %s", msg.topic, msg.payload[:100])
         return
+    log.info("Nhận MQTT [%s]: %s", msg.topic, msg.payload.decode()[:300])
     try:
         handler(code, payload)
         log.info("Đã xử lý %s từ %s", kind, code)

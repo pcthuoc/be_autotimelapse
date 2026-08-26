@@ -1,8 +1,13 @@
+import logging
+
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from core.models import Profile
+
+
+log = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=User)
@@ -27,7 +32,7 @@ from django.db.models import F  # noqa: E402
 from django.db.models.signals import post_delete  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
-from core.models.media import Media, MediaDayStat  # noqa: E402
+from core.models.media import Media, MediaArchive, MediaDayStat, VideoRender  # noqa: E402
 
 
 def _local_day(dt):
@@ -64,7 +69,7 @@ def media_stat_dec(sender, instance, **kwargs):
     MediaDayStat.objects.filter(pk=stat.pk).update(count=F("count") - 1)
     if stat.cover_id == instance.id:
         nxt = (
-            Media.objects.filter(camera_id=instance.camera_id)
+            Media.objects.filter(camera_id=instance.camera_id, taken_at__date=day)
             .exclude(pk=instance.pk)
             .order_by("-taken_at")
             .first()
@@ -85,15 +90,48 @@ def media_storage_cleanup(sender, instance, **kwargs):
     try:
         _storage.delete_key(instance.s3_key, storage=_backend)
     except Exception:  # noqa: BLE001
-        pass
+        log.exception("Không xóa được original %s khỏi %s", instance.s3_key, _backend)
     try:
         if instance.thumb_key:
-            _storage.delete_key(instance.thumb_key, storage=_backend)
+            # Thumbnail luôn nằm ở SeaweedFS, original ưu tiên R2.
+            _storage.delete_key(instance.thumb_key, storage="seaweed")
     except Exception:  # noqa: BLE001
-        pass
+        log.exception("Không xóa được thumbnail %s", instance.thumb_key)
     try:
         _invalidate_presign_cache_key(instance.s3_key)
         if instance.thumb_key:
             _invalidate_presign_cache_key(instance.thumb_key)
     except Exception:  # noqa: BLE001
-        pass
+        log.exception("Không invalidate được presigned cache cho media %s", instance.pk)
+
+
+@receiver(post_delete, sender=VideoRender)
+def video_render_storage_cleanup(sender, instance, **kwargs):
+    """Không để orphan MP4 khi render bị xóa bởi API hoặc cascade DB."""
+    if not instance.output_key:
+        return
+    from core.utils import storage as _storage
+    try:
+        _storage.delete_key(
+            instance.output_key,
+            storage=instance.effective_output_storage,
+            r2_output=instance.uses_r2_output_bucket,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("Không xóa được output của render %s", instance.pk)
+
+
+@receiver(post_delete, sender=MediaArchive)
+def media_archive_storage_cleanup(sender, instance, **kwargs):
+    """Không để orphan ZIP khi archive bị xóa bởi API hoặc cascade DB."""
+    if not instance.zip_key:
+        return
+    from core.utils import storage as _storage
+    try:
+        _storage.delete_key(
+            instance.zip_key,
+            storage=instance.effective_output_storage,
+            r2_output=instance.uses_r2_output_bucket,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("Không xóa được output của archive %s", instance.pk)

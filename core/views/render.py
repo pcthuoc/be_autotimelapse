@@ -99,8 +99,11 @@ def render_status(request, pk):
     }
     if vr.status == VideoRender.Status.READY and vr.output_key:
         try:
-            _rs = "r2" if storage._r2_enabled() else None
-            data["download_url"] = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
+            data["download_url"] = storage.presigned_get_url(
+                vr.output_key, expire=3600,
+                storage=vr.effective_output_storage,
+                r2_output=vr.uses_r2_output_bucket,
+            )
         except Exception:
             pass
 
@@ -117,8 +120,11 @@ def render_download(request, pk):
         return JsonResponse({"error": "Video chưa sẵn sàng."}, status=400)
 
     try:
-        _rs = "r2" if storage._r2_enabled() else None
-        url = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
+        url = storage.presigned_get_url(
+            vr.output_key, expire=3600,
+            storage=vr.effective_output_storage,
+            r2_output=vr.uses_r2_output_bucket,
+        )
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)
 
@@ -142,8 +148,11 @@ def render_list(request):
         download_url = None
         if vr.status == VideoRender.Status.READY and vr.output_key:
             try:
-                _rs = "r2" if storage._r2_enabled() else None
-                download_url = storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
+                download_url = storage.presigned_get_url(
+                    vr.output_key, expire=3600,
+                    storage=vr.effective_output_storage,
+                    r2_output=vr.uses_r2_output_bucket,
+                )
             except Exception:
                 pass
         render_rows.append({"vr": vr, "download_url": download_url})

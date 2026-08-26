@@ -116,9 +116,9 @@ def register_device(camera):
     responses = _send_commands(commands)
     errors = _err(responses)
     if any("already exists" in (r.get("error") or "").lower() for r in responses):
-        # Client đã có → đồng bộ lại password
+        # Client đã có → đồng bộ lại password bằng modifyClient
         errors += _err(_send_commands([
-            {"command": "setClientPassword", "username": camera.code,
+            {"command": "modifyClient", "username": camera.code,
              "password": camera.mqtt_password},
             {"command": "addGroupClient", "groupname": _GROUP,
              "username": camera.code, "priority": -1},

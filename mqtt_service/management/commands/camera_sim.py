@@ -120,8 +120,8 @@ class Command(BaseCommand):
                             help="Chu kỳ gửi telemetry (giây, mặc định 30).")
         parser.add_argument("--server", default="http://127.0.0.1:8000",
                             help="Base URL device API (mặc định http://127.0.0.1:8000).")
-        parser.add_argument("--device-key", help="key_id của CameraCredential.")
-        parser.add_argument("--device-secret", help="Secret thô của CameraCredential.")
+        parser.add_argument("--device-key", help="Mặc định dùng camera.code.")
+        parser.add_argument("--device-secret", help="Mặc định dùng camera.mqtt_password.")
         parser.add_argument("--capture-interval", type=int, default=0,
                             help="Chu kỳ chụp+upload giả (giây). 0 = tắt.")
 
@@ -143,10 +143,11 @@ class Command(BaseCommand):
         state = {"capture_interval_sec": 3600}
         live = {"session_id": None, "fps": 1, "seq": 0}
 
-        http = None
-        if options.get("device_key") and options.get("device_secret"):
-            http = DeviceHttp(options["server"], options["device_key"],
-                              options["device_secret"])
+        http = DeviceHttp(
+            options["server"],
+            options.get("device_key") or code,
+            options.get("device_secret") or password,
+        )
         if options.get("capture_interval"):
             state["capture_interval_sec"] = options["capture_interval"]
 

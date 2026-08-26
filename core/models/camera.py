@@ -79,9 +79,19 @@ class Camera(models.Model):
         NIKON_D7100  = "nikon_d7100",  "Nikon D7100"
         NIKON_D7500  = "nikon_d7500",  "Nikon D7500"
         NIKON_Z50    = "nikon_z50",    "Nikon Z50"
+        CANON_6D     = "canon_6d",     "Canon EOS 6D"
+        CANON_6D2    = "canon_6d2",    "Canon EOS 6D Mark II"
+        CANON_5D3    = "canon_5d3",    "Canon EOS 5D Mark III"
+        CANON_5D4    = "canon_5d4",    "Canon EOS 5D Mark IV"
+        CANON_5DS    = "canon_5ds",    "Canon EOS 5Ds"
+        CANON_7D     = "canon_7d",     "Canon EOS 7D"
+        CANON_7D2    = "canon_7d2",    "Canon EOS 7D Mark II"
         CANON_200D   = "canon_200d",   "Canon EOS 200D"
         CANON_90D    = "canon_90d",    "Canon EOS 90D"
-        GENERIC      = "generic",      "Generic (other)"""
+        CANON_R      = "canon_r",      "Canon EOS R"
+        CANON_R5     = "canon_r5",     "Canon EOS R5"
+        CANON_R6     = "canon_r6",     "Canon EOS R6"
+        GENERIC      = "generic",      "Generic (other)"
 
     # NOTE: thêm model mới ở đây; mỗi Model cần 1 profile trong core/camera_specs.py
 
@@ -358,6 +368,10 @@ class CameraDevice(models.Model):
         null=True, blank=True,
         help_text="Lần cuối CM4 gửi Telemetry / thực thi nhiệm vụ.",
     )
+    force_power_on = models.BooleanField(
+        default=False,
+        help_text="Cờ cưỡng bức bật CM4 từ Web UI (giữ CM4 luôn chạy, không tắt sau khi chụp).",
+    )
     sim_active_node = models.CharField(
         max_length=16,
         default="esp32",
@@ -379,7 +393,28 @@ class CameraDevice(models.Model):
     def __str__(self):
         return f"Device[{self.camera.code}]"
 
+    CM4_BOOT_TIMEOUT_SEC = 60  # Timeout 60s (1 phút) cho quá trình bật/tắt CM4
+
     # ── Suy diễn hiển thị ────────────────────────────────────────────
+
+    @property
+    def effective_cm4_power_state(self):
+        """Trạng thái nguồn CM4 thực tế có tính timeout.
+        1. Nếu 'powering_on' hoặc 'shutting_down' quá 60s không có phản hồi -> 'off'.
+        2. Nếu 'running' nhưng cm4_last_seen_at quá 60s không có heartbeat/telemetry -> 'off'.
+        """
+        state = self.cm4_power_state or self.CM4State.OFF
+        from django.utils import timezone
+        now = timezone.now()
+        if state in (self.CM4State.POWERING_ON, self.CM4State.SHUTTING_DOWN):
+            if self.updated_at and (now - self.updated_at).total_seconds() > self.CM4_BOOT_TIMEOUT_SEC:
+                return self.CM4State.OFF
+        elif state == self.CM4State.RUNNING:
+            if self.cm4_last_seen_at and (now - self.cm4_last_seen_at).total_seconds() > self.CM4_BOOT_TIMEOUT_SEC:
+                return self.CM4State.OFF
+            elif not self.cm4_last_seen_at and self.updated_at and (now - self.updated_at).total_seconds() > self.CM4_BOOT_TIMEOUT_SEC:
+                return self.CM4State.OFF
+        return state
 
     @property
     def wake_pending(self):
@@ -528,31 +563,44 @@ class CameraSettings(models.Model):
         return f"Settings[{self.camera.code}]"
 
     def to_payload(self, only=None):
-        """Dựng payload cho set_settings (bỏ field rỗng)."""
-        fields = only if only is not None else self.SETTABLE_FIELDS
-        return {
-            name: getattr(self, name)
-            for name in fields
-            if name in self.SETTABLE_FIELDS and getattr(self, name)
-        }
+        """Dựng payload cho set_settings (bỏ field rỗng và field không hỗ trợ bởi dòng máy)."""
+        if only is not None:
+            fields = only
+        else:
+            from core.camera_specs import get_settable_fields
+            cam_model = getattr(self.camera, "camera_model", "generic") or "generic"
+            model_fields = get_settable_fields(cam_model)
+            fields = model_fields if model_fields else self.SETTABLE_FIELDS
+
+        payload = {}
+        for name in fields:
+            val = getattr(self, name, None)
+            if val:
+                payload[name] = val
+        return payload
 
     @property
     def in_sync(self):
-        """True nếu mọi field settable khớp applied (string equality)."""
+        """True nếu mọi field settable áp dụng cho dòng máy này khớp applied."""
         if not self.applied:
             return False
-        # focus_switch (physical lens switch) cho biết AF có khả dụng không
-        focus_switch_is_af = self.applied.get("focus_switch", "") not in ("", "Manual")
-        for name in self.SETTABLE_FIELDS:
-            value = getattr(self, name)
+        from core.camera_specs import get_settable_fields
+        cam_model = getattr(self.camera, "camera_model", "generic") or "generic"
+        model_settable = get_settable_fields(cam_model)
+        check_fields = model_settable if model_settable else self.SETTABLE_FIELDS
+        
+        for name in check_fields:
+            value = getattr(self, name, None)
             if not value:
+                continue
+            # Nếu field không có trong applied hoặc capabilities của máy ảnh thì bỏ qua
+            if name not in self.applied and self.capabilities and name not in self.capabilities:
                 continue
             got = str(self.applied.get(name, ""))
             if got == str(value):
                 continue
-            # D5300 quirk: trong Live View, focusmode2 luôn trả MF (fixed).
-            # Nếu focus_switch đang ở AF và liveview_af đã được set → bỏ qua.
-            if name == "focus_mode" and focus_switch_is_af and self.liveview_af:
+            # Nikon quirk: Live View AF
+            if name == "focus_mode" and self.applied.get("focus_switch") not in ("", "Manual") and getattr(self, "liveview_af", ""):
                 continue
             return False
         return True
@@ -599,6 +647,15 @@ class AlertSettings(models.Model):
         blank=True, verbose_name="Email nhận cảnh báo"
     )
 
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Alert settings"
+        verbose_name_plural = "Alert settings"
+
+    def __str__(self):
+        return f"Alert: {self.camera.code}"
+
 
 class CameraSchedule(models.Model):
     """Lịch hẹn giờ chụp ảnh theo khung giờ cho Camera."""
@@ -636,12 +693,3 @@ class CameraSchedule(models.Model):
             "days_of_week": self.days_of_week or [1, 2, 3, 4, 5, 6, 7],
             "created_at": self.created_at.isoformat(),
         }
-
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Alert settings"
-        verbose_name_plural = "Alert settings"
-
-    def __str__(self):
-        return f"Alert: {self.camera.code}"

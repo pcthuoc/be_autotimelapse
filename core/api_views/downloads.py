@@ -66,21 +66,27 @@ def api_archive_create(request, camera_pk):
     return Response({'ok': True, 'id': str(archive.id)}, status=201)
 
 
-@api_view(['DELETE'])
+@api_view(['GET', 'DELETE'])
 def api_archive_detail(request, pk):
     try:
         archive = MediaArchive.objects.select_related('camera').get(pk=pk)
     except MediaArchive.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
+    if not archive.is_accessible_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+    if request.method == 'GET':
+        return Response({
+            'id': str(archive.id), 'status': archive.status,
+            'item_count': archive.item_count, 'size_bytes': archive.size_bytes,
+            'error': archive.error, 'expired': archive.is_expired,
+            'created_at': archive.created_at.isoformat(),
+            'ready_at': archive.ready_at.isoformat() if archive.ready_at else None,
+            'expires_at': archive.expires_at.isoformat() if archive.expires_at else None,
+        })
     if not (request.user.is_staff or archive.requested_by_id == request.user.id
             or archive.camera.is_editable_by(request.user)):
         return Response({'detail': 'Permission denied'}, status=403)
-    if getattr(archive, 'zip_key', None):
-        try:
-            from core.utils import storage as _st
-            _st.delete_key(archive.zip_key)
-        except Exception:
-            pass
+    # post_delete signal xóa đúng object storage/bucket, kể cả khi cascade.
     archive.delete()
     return Response(status=204)
 
@@ -110,12 +116,12 @@ def api_downloads(request):
     items = []
     for r in renders:
         url = None
-        if r.status == 'ready' and r.output_key:
+        if r.status == 'ready' and r.output_key and not r.is_expired:
             try:
-                _rs = "r2" if _r2_enabled() else None
                 url = _st.presigned_get_url(r.output_key, expire=3600,
                                             download_name=f"{r.camera.code}_{r.date_from}_{r.date_to}.mp4",
-                                            storage=_rs)
+                                            storage=r.effective_output_storage,
+                                            r2_output=r.uses_r2_output_bucket)
             except Exception:
                 pass
         items.append({
@@ -132,15 +138,14 @@ def api_downloads(request):
         })
     for a in archives:
         url = None
-        if a.status == 'ready' and a.zip_key:
+        if a.status == 'ready' and a.zip_key and not a.is_expired:
             try:
-                _arc_storage = "r2" if _r2_enabled() else None
                 url = _st.presigned_get_url(
                     a.zip_key,
                     expire=3600,
                     download_name=f"{a.camera.code}_photos.zip",
-                    storage=_arc_storage,
-                    r2_output=bool(_arc_storage),
+                    storage=a.effective_output_storage,
+                    r2_output=a.uses_r2_output_bucket,
                 )
             except Exception:
                 pass

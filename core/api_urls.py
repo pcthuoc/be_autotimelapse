@@ -4,6 +4,7 @@ from . import api_views
 urlpatterns = [
     # Auth
     path('auth/login/',  api_views.api_login),
+    path('auth/csrf/',   api_views.api_csrf),
     path('auth/logout/', api_views.api_logout),
     path('auth/me/',     api_views.api_me),
 
@@ -19,6 +20,12 @@ urlpatterns = [
     path('cameras/<uuid:pk>/live/frame/',        api_views.api_camera_live_frame),
     path('cameras/<uuid:pk>/device/',            api_views.api_camera_device),
     path('cameras/<uuid:pk>/device/update/',     api_views.api_camera_device_update),
+    path('cameras/<uuid:pk>/device/sim/',        api_views.api_camera_device_sim),
+    path('cameras/<uuid:pk>/device/wake/',       api_views.api_camera_device_wake),
+    path('cameras/<uuid:pk>/device/settings/',   api_views.api_camera_device_settings),
+    path('cameras/<uuid:pk>/device/camera-settings/pull/', api_views.api_camera_settings_pull),
+    path('cameras/<uuid:pk>/device/camera-settings/',      api_views.api_camera_settings_save),
+    path('cameras/<uuid:pk>/device/state/',      api_views.api_camera_device_state),
     path('cameras/<uuid:pk>/camera-settings/',   api_views.api_camera_settings),
     path('cameras/<uuid:pk>/credentials/',       api_views.api_camera_credentials),
     path('cameras/<uuid:pk>/simconfig/',         api_views.api_camera_simconfig),

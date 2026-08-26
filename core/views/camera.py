@@ -754,11 +754,8 @@ def live_view_start(request, pk):
     session_id = cache.get(f"live:{cam_id}:session")
     if not session_id:
         session_id = f"lv-{_s.token_hex(6)}"
-        cache.set(f"live:{cam_id}:session", session_id, LIVE_SESSION_TTL)
-        config_publisher.start_live_view(camera.code, session_id)
-    else:
-        # Đã có phiên (người khác đang xem) → dùng chung, chỉ gia hạn
-        cache.set(f"live:{cam_id}:session", session_id, LIVE_SESSION_TTL)
+    cache.set(f"live:{cam_id}:session", session_id, LIVE_SESSION_TTL)
+    config_publisher.start_live_view(camera.code, session_id)
     return JsonResponse({"ok": True, "session_id": session_id})
 
 
@@ -817,5 +814,6 @@ def live_view_frame(request, pk):
     resp = HttpResponse(frame, content_type="image/jpeg")
     resp["X-Frame-Seq"] = str(meta.get("seq", 0))
     resp["X-Frame-At"] = meta.get("at", "")
+    resp["Access-Control-Expose-Headers"] = "X-Frame-Seq, X-Frame-At"
     resp["Cache-Control"] = "no-store"
     return resp

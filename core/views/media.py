@@ -329,12 +329,11 @@ def media_archive_download(request, pk):
     if archive.status != MediaArchive.Status.READY or archive.is_expired:
         raise Http404
     name = f"{archive.camera.code}_{archive.created_at:%Y%m%d_%H%M%S}.zip"
-    zip_storage = "r2" if storage._r2_enabled() else None
     url = storage.presigned_get_url(
         archive.zip_key,
         download_name=name,
-        storage=zip_storage,
-        r2_output=bool(zip_storage),
+        storage=archive.effective_output_storage,
+        r2_output=archive.uses_r2_output_bucket,
     )
     if not url:
         raise Http404
@@ -379,8 +378,11 @@ def downloads_panel_data(request):
         dl_url = None
         if vr.status == VideoRender.Status.READY and vr.output_key:
             try:
-                _rs = "r2" if _storage._r2_enabled() else None
-                dl_url = _storage.presigned_get_url(vr.output_key, expire=3600, storage=_rs)
+                dl_url = _storage.presigned_get_url(
+                    vr.output_key, expire=3600,
+                    storage=vr.effective_output_storage,
+                    r2_output=vr.uses_r2_output_bucket,
+                )
             except Exception:
                 pass
         renders.append({

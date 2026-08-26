@@ -42,7 +42,11 @@ def api_dashboard(request):
         if latest_media:
             try:
                 from core.utils import storage as _st
-                latest_thumb_url = _st.presigned_get_url(latest_media.thumb_key or latest_media.s3_key, expire=3600)
+                latest_thumb_url = _st.presigned_get_url(
+                    latest_media.effective_thumb_key,
+                    expire=3600,
+                    storage=latest_media.effective_thumb_storage,
+                )
             except Exception:
                 pass
         cam_data = []

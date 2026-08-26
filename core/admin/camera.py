@@ -3,20 +3,10 @@ from django.utils.html import format_html
 
 from core.models import (
     Camera,
-    CameraCredential,
     CameraDevice,
     CameraSettings,
     Site,
 )
-
-
-class CameraCredentialInline(admin.TabularInline):
-    model = CameraCredential
-    extra = 0
-    readonly_fields = ("key_id", "status", "last_rotated_at", "created_at")
-    fields = ("key_id", "status", "last_rotated_at", "created_at")
-    can_delete = False
-    show_change_link = True
 
 
 class CameraDeviceInline(admin.StackedInline):
@@ -77,7 +67,7 @@ class CameraAdmin(admin.ModelAdmin):
     list_filter = ("status", "camera_model", "site")
     search_fields = ("code", "name")
     readonly_fields = ("created_at", "updated_at")
-    inlines = (CameraDeviceInline, CameraSettingsInline, CameraCredentialInline)
+    inlines = (CameraDeviceInline, CameraSettingsInline)
 
     @admin.display(description="Status")
     def status_badge(self, obj):
@@ -91,15 +81,3 @@ class CameraAdmin(admin.ModelAdmin):
             colors.get(obj.status, "black"),
             obj.get_status_display(),
         )
-
-
-@admin.register(CameraCredential)
-class CameraCredentialAdmin(admin.ModelAdmin):
-    list_display = ("camera", "key_id_short", "status", "last_rotated_at", "created_at")
-    list_filter = ("status", "camera__site")
-    search_fields = ("camera__code", "key_id")
-    readonly_fields = ("key_id", "secret_hash", "created_at")
-
-    @admin.display(description="Key ID")
-    def key_id_short(self, obj):
-        return f"{obj.key_id[:12]}…"

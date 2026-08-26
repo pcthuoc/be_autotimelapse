@@ -5,6 +5,18 @@ from core.models import Site, Client
 from ._helpers import filter_sites_for_user, get_user_membership, is_client_admin
 
 
+def _can_manage_site(user, site):
+    """Hai lớp: đúng role admin và đúng client sở hữu Site."""
+    if user.is_staff:
+        return True
+    membership = get_user_membership(user)
+    return bool(
+        membership
+        and membership.role == 'admin'
+        and site.client_id == membership.client_id
+    )
+
+
 @api_view(['GET', 'POST'])
 def api_sites(request):
     if request.method == 'GET':
@@ -43,7 +55,7 @@ def api_site_detail(request, pk):
             if not m or site.client_id != m.client_id:
                 return Response({'detail': 'Permission denied'}, status=403)
     else:
-        if not (request.user.is_staff or is_client_admin(request.user)):
+        if not _can_manage_site(request.user, site):
             return Response({'detail': 'Permission denied'}, status=403)
 
     if request.method == 'GET':
@@ -71,11 +83,8 @@ def api_site_assign_client(request, pk):
         return Response({'detail': 'Not found'}, status=404)
 
     m = get_user_membership(request.user)
-    if not request.user.is_staff:
-        if not m or m.role != 'admin':
-            return Response({'detail': 'Permission denied'}, status=403)
-        if site.client_id not in (None, m.client_id):
-            return Response({'detail': 'Permission denied'}, status=403)
+    if not request.user.is_staff and not _can_manage_site(request.user, site):
+        return Response({'detail': 'Permission denied'}, status=403)
 
     client_id = request.data.get('client_id')
     if client_id:
@@ -86,6 +95,9 @@ def api_site_assign_client(request, pk):
         except Client.DoesNotExist:
             return Response({'detail': 'Client not found'}, status=404)
     else:
+        # Client admin không được biến Site thành tài nguyên mồ côi/toàn cục.
+        if not request.user.is_staff:
+            return Response({'detail': 'Chỉ superadmin được bỏ gán client'}, status=403)
         site.client = None
     site.save(update_fields=['client', 'updated_at'])
     return Response({'ok': True})

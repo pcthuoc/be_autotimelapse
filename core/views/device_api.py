@@ -1,12 +1,12 @@
 """
 API cho THIẾT BỊ camera (không dùng session user).
 
-Xác thực: header ``X-Device-Key`` (key_id) + ``X-Device-Secret`` (raw secret)
-đối chiếu CameraCredential (secret chỉ lưu hash — CODING_RULES §9).
+Xác thực dùng chung credential của camera:
+``X-Device-Key = camera.code`` và ``X-Device-Secret = camera.mqtt_password``.
 
 Luồng upload ảnh chụp (Capture):
   1. POST /api/device/upload/presign   → cấp presigned PUT URL (ảnh + thumb)
-  2. Camera PUT file thẳng lên SeaweedFS (Django không đụng byte ảnh)
+  2. Camera PUT original thẳng lên R2, thumbnail lên SeaweedFS
   3. POST /api/device/upload/complete  → verify object tồn tại → tạo Media
 
 Luồng Live View (frame tạm, KHÔNG tạo Media):
@@ -229,3 +229,38 @@ def live_frame(request):
     # Gia hạn session khi còn frame đổ về
     cache.set(f"live:{cam_id}:session", active, LIVE_SESSION_TTL)
     return JsonResponse({"ok": True, "seq": seq})
+
+
+# ── Device Config: CM4 pull cấu hình & trạng thái cưỡng bức bật ──────────────
+
+@csrf_exempt
+@device_auth
+def device_config(request):
+    """Camera CM4 chủ động PULL cấu hình vận hành và trạng thái cưỡng bức bật.
+
+    Trả về:
+      - force_power_on: bool (true nếu Web UI đang cưỡng bức bật -> CM4 không tự tắt)
+      - cm4_power_state: str (off / powering_on / running / shutting_down)
+      - capture_interval_sec: int
+      - schedule_enabled: bool
+      - work_start_time, work_end_time: str
+      - schedules: list khung giờ chụp
+      - server_time: ISO timestamp
+    """
+    from core.models.camera import CameraDevice
+    dev, _ = CameraDevice.objects.get_or_create(camera=request.camera)
+    schedules = [s.to_dict() for s in request.camera.schedules.filter(is_enabled=True)]
+
+    return JsonResponse({
+        "ok": True,
+        "camera_code": request.camera.code,
+        "force_power_on": bool(dev.force_power_on),
+        "cm4_power_state": dev.cm4_power_state,
+        "capture_interval_sec": dev.capture_interval_sec,
+        "schedule_enabled": dev.schedule_enabled,
+        "work_start_time": dev.work_start_time,
+        "work_end_time": dev.work_end_time,
+        "schedules": schedules,
+        "server_time": timezone.now().isoformat(),
+    })
+

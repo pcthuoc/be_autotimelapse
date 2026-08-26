@@ -17,6 +17,7 @@ Chạy: python3 sim_dualcore.py
 import io
 import json
 import logging
+import os
 import random
 import threading
 import queue as _queue
@@ -29,8 +30,8 @@ import paho.mqtt.client as mqtt
 from PIL import Image, ImageDraw, ImageFont
 
 # ── Thông số kết nối MQTT & Server ──────────────────────────────────────────
-CAMERA_CODE     = "CAM-F53RQV"
-MQTT_PASSWORD   = "8_2Vhy43gl6GcPvMuDu3eQ"
+CAMERA_CODE     = os.getenv("CAMERA_CODE", "CAM-EXAMPLE")
+MQTT_PASSWORD   = os.getenv("MQTT_PASSWORD", "")
 MQTT_BROKER     = "atl-mosquitto"
 MQTT_PORT       = 1883
 

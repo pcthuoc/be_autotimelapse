@@ -52,7 +52,7 @@ def api_storage_stats(request):
         },
         'total': {'count': seaweed_count + r2_count, 'bytes': seaweed_bytes + r2_bytes},
         'config': {
-            'hot_days': getattr(_s, 'STORAGE_HOT_DAYS', 30),
+            'mode': 'r2_original_seaweed_thumbnail',
             'render_ttl_days': getattr(_s, 'VIDEO_RENDER_TTL_DAYS', 7),
         },
     })

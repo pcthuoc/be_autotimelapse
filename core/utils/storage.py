@@ -1,5 +1,5 @@
 """
-Dual-backend storage helper: SeaweedFS (hot) và Cloudflare R2 (primary/cold).
+Hybrid storage helper: R2 giữ original/output; SeaweedFS giữ thumbnail/cache.
 
 Django KHÔNG serve file. Nó chỉ:
   1. Kiểm tra quyền (object-level permission).
@@ -10,6 +10,7 @@ Tất cả hàm đều nhận tham số storage=None (mặc định: "seaweed").
 """
 
 import hashlib
+import shutil
 from functools import lru_cache
 
 import boto3
@@ -138,7 +139,9 @@ def _presigned_get_r2(key, expire=None, download_name=None, inline_content_type=
     """Sinh presigned GET URL trực tiếp từ R2 (hoặc public domain nếu có)."""
     cfg = settings.R2
     public = cfg.get("PUBLIC_DOMAIN")
-    if public:
+    # PUBLIC_DOMAIN thường chỉ map vào bucket media. Không dùng nó cho output
+    # bucket, nếu không video sẽ trỏ sang đúng key nhưng sai bucket.
+    if public and not download_name and not inline_content_type and (bucket is None or bucket == _r2_bucket()):
         return f"https://{public.rstrip('/')}/{key}"
     params = {"Bucket": bucket or _r2_bucket(), "Key": key}
     if download_name:
@@ -156,9 +159,25 @@ def _presigned_get_r2(key, expire=None, download_name=None, inline_content_type=
 _PRESIGN_CACHE_RATIO = 0.85  # cache 85% TTL → URL trả ra luôn còn ít nhất 9 phút hạn
 
 
-def _presign_cache_key(key, ttl_bucket, download_name=None):
-    """Tạo Redis key ổn định cho 1 s3 key + TTL bucket."""
-    raw = f"presign:{_bucket()}:{key}:{ttl_bucket}:{download_name or ''}"
+def _presign_version_key(key):
+    return "psver:" + hashlib.md5(key.encode()).hexdigest()
+
+
+def _presign_cache_key(
+    key, ttl_bucket, *, storage=None, download_name=None,
+    inline_content_type=None, r2_output=False, version=0,
+):
+    """Cache key phân biệt đầy đủ backend, bucket và response headers."""
+    backend = storage or "seaweed"
+    bucket = (
+        _r2_output_bucket() if backend == "r2" and r2_output
+        else _r2_bucket() if backend == "r2"
+        else _bucket()
+    )
+    raw = (
+        f"presign:{backend}:{bucket}:{key}:{ttl_bucket}:"
+        f"{download_name or ''}:{inline_content_type or ''}:{int(r2_output)}:{version}"
+    )
     return "psurl:" + hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -170,11 +189,26 @@ def presigned_get_url_cached(key, expire=None, storage=None, **kwargs):
     if not key:
         return None
     # R2 public domain: trả URL tĩnh, không cần cache
-    if storage == "r2" and getattr(settings, "R2", {}).get("PUBLIC_DOMAIN"):
+    if (
+        storage == "r2"
+        and getattr(settings, "R2", {}).get("PUBLIC_DOMAIN")
+        and not kwargs.get("download_name")
+        and not kwargs.get("inline_content_type")
+        and not kwargs.get("r2_output")
+    ):
         return _presigned_get_r2(key, **kwargs)
     ttl = expire or (settings.R2 if storage == "r2" else settings.SEAWEED)["PRESIGN_EXPIRE"]
     ttl_bucket = (ttl // 600) * 600
-    c_key = _presign_cache_key(key, ttl_bucket, download_name=kwargs.get('download_name'))
+    version = cache.get(_presign_version_key(key), 0)
+    c_key = _presign_cache_key(
+        key,
+        ttl_bucket,
+        storage=storage,
+        download_name=kwargs.get("download_name"),
+        inline_content_type=kwargs.get("inline_content_type"),
+        r2_output=kwargs.get("r2_output", False),
+        version=version,
+    )
 
     cached = cache.get(c_key)
     if cached:
@@ -190,9 +224,13 @@ def _invalidate_presign_cache_key(key, expire=None):
     """Xóa cache presigned URL của 1 s3 key (gọi khi xóa Media record)."""
     if not key:
         return
-    ttl = expire or settings.SEAWEED["PRESIGN_EXPIRE"]
-    ttl_bucket = (ttl // 600) * 600
-    cache.delete(_presign_cache_key(key, ttl_bucket))
+    version_key = _presign_version_key(key)
+    if cache.add(version_key, 1, timeout=None):
+        return
+    try:
+        cache.incr(version_key)
+    except (ValueError, TypeError):
+        cache.set(version_key, 1, timeout=None)
 
 
 def presigned_put_url(key, content_type="image/jpeg", expire=None, storage=None):
@@ -214,13 +252,14 @@ def presigned_put_url(key, content_type="image/jpeg", expire=None, storage=None)
     )
 
 
-def head_size(key, storage=None):
+def head_size(key, storage=None, r2_output=False):
     """HEAD 1 object: trả size_bytes nếu tồn tại, None nếu không."""
     if not key:
         return None
     try:
         if storage == "r2":
-            resp = _r2_client().head_object(Bucket=_r2_bucket(), Key=key)
+            bucket = _r2_output_bucket() if r2_output else _r2_bucket()
+            resp = _r2_client().head_object(Bucket=bucket, Key=key)
         else:
             resp = _client().head_object(Bucket=_bucket(), Key=key)
         return int(resp.get("ContentLength", 0))
@@ -228,12 +267,27 @@ def head_size(key, storage=None):
         return None
 
 
-def put_bytes(key, data, content_type="image/jpeg", storage=None):
+def put_bytes(key, data, content_type="image/jpeg", storage=None, r2_output=False):
     """Upload bytes trực tiếp (dùng cho seed / thumbnail sinh phía backend)."""
     if storage == "r2":
-        _r2_client().put_object(Bucket=_r2_bucket(), Key=key, Body=data, ContentType=content_type)
+        bucket = _r2_output_bucket() if r2_output else _r2_bucket()
+        _r2_client().put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
     else:
         _client().put_object(Bucket=_bucket(), Key=key, Body=data, ContentType=content_type)
+    return key
+
+
+def upload_file(key, file_path, content_type="application/octet-stream", storage=None, r2_output=False):
+    """Upload file từ disk bằng multipart/file streaming, không nạp toàn bộ vào RAM."""
+    if storage == "r2":
+        bucket = _r2_output_bucket() if r2_output else _r2_bucket()
+        _r2_client().upload_file(
+            file_path, bucket, key, ExtraArgs={"ContentType": content_type}
+        )
+    else:
+        _client().upload_file(
+            file_path, _bucket(), key, ExtraArgs={"ContentType": content_type}
+        )
     return key
 
 
@@ -246,12 +300,28 @@ def download_bytes(key, storage=None):
     return obj["Body"].read()
 
 
-def delete_key(key, storage=None):
+def download_to_file(key, file_path, storage=None, chunk_size=1024 * 1024):
+    """Stream object xuống file theo block; RAM không phụ thuộc kích thước ảnh/video."""
+    if storage == "r2":
+        obj = _r2_client().get_object(Bucket=_r2_bucket(), Key=key)
+    else:
+        obj = _client().get_object(Bucket=_bucket(), Key=key)
+    body = obj["Body"]
+    try:
+        with open(file_path, "wb") as fh:
+            shutil.copyfileobj(body, fh, length=chunk_size)
+    finally:
+        body.close()
+    return file_path
+
+
+def delete_key(key, storage=None, r2_output=False):
     """Xoá 1 object (dùng khi archive hết hạn hoặc media bị xóa)."""
     if not key:
         return
     if storage == "r2":
-        _r2_client().delete_object(Bucket=_r2_bucket(), Key=key)
+        bucket = _r2_output_bucket() if r2_output else _r2_bucket()
+        _r2_client().delete_object(Bucket=bucket, Key=key)
     else:
         _client().delete_object(Bucket=_bucket(), Key=key)
 
@@ -268,39 +338,56 @@ def build_archive_zip(entries, zip_key, progress_cb=None):
     import os
     import tempfile
     import zipfile
+    from concurrent.futures import ThreadPoolExecutor
 
     out_storage = "r2" if _r2_enabled() else "seaweed"
     count = 0
-    fd, tmp_path = tempfile.mkstemp(suffix=".zip")
-    os.close(fd)
-    try:
-        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED) as zf:
-            for entry in entries:
-                arcname, key = entry[0], entry[1]
-                src_storage = entry[2] if len(entry) > 2 else None
+    workers = max(1, int(getattr(settings, "ARCHIVE_DOWNLOAD_WORKERS", 4)))
+    # Mỗi batch tối đa workers ảnh trên disk/RAM; ZIP có thể chứa hàng nghìn ảnh.
+    batch_size = workers * 2
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = os.path.join(tmpdir, "archive.zip")
+
+        def fetch(item):
+            idx, entry = item
+            arcname, key = entry[0], entry[1]
+            src_storage = entry[2] if len(entry) > 2 else None
+            staged = os.path.join(tmpdir, f"source_{idx:08d}.bin")
+            try:
+                download_to_file(key, staged, storage=src_storage)
+                if os.path.getsize(staged) == 0:
+                    os.remove(staged)
+                    return None
+                return arcname, staged
+            except Exception:
                 try:
-                    data = download_bytes(key, storage=src_storage)
-                except Exception:
-                    continue
-                zf.writestr(arcname, data)
-                count += 1
-                if progress_cb:
-                    progress_cb(count)
+                    os.remove(staged)
+                except OSError:
+                    pass
+                return None
+
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+            for start in range(0, len(entries), batch_size):
+                indexed = list(enumerate(entries[start:start + batch_size], start=start))
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    downloaded = list(executor.map(fetch, indexed))
+                for result in downloaded:
+                    if result is None:
+                        continue
+                    arcname, staged = result
+                    zf.write(staged, arcname=arcname)
+                    os.remove(staged)
+                    count += 1
+                    if progress_cb:
+                        progress_cb(count)
+
         size = os.path.getsize(tmp_path)
-        with open(tmp_path, "rb") as fh:
-            if out_storage == "r2":
-                _r2_client().upload_fileobj(
-                    fh, _r2_output_bucket(), zip_key,
-                    ExtraArgs={"ContentType": "application/zip"},
-                )
-            else:
-                _client().upload_fileobj(
-                    fh, _bucket(), zip_key,
-                    ExtraArgs={"ContentType": "application/zip"},
-                )
+        upload_file(
+            zip_key,
+            tmp_path,
+            content_type="application/zip",
+            storage=out_storage,
+            r2_output=(out_storage == "r2"),
+        )
         return size, count
-    finally:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass

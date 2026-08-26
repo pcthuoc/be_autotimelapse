@@ -1,10 +1,13 @@
 # Re-export tất cả views để api_urls.py không cần thay đổi gì
-from .auth import api_login, api_logout, api_me
+from .auth import api_csrf, api_login, api_logout, api_me
 from .dashboard import api_dashboard
 from .cameras import (
     api_cameras, api_camera_detail, api_camera_live_latest,
     api_camera_live_start, api_camera_live_stop, api_camera_live_frame,
     api_camera_device, api_camera_device_update,
+    api_camera_device_sim, api_camera_device_wake,
+    api_camera_device_settings, api_camera_settings_save,
+    api_camera_settings_pull, api_camera_device_state,
     api_camera_credentials, api_camera_simconfig,
     api_camera_power_on_cm4, api_camera_power_off_cm4,
     api_camera_mqtt_register, api_camera_settings,
@@ -20,11 +23,14 @@ from .alerts import api_alert_settings, api_alert_settings_save
 from .storage import api_storage_stats
 
 __all__ = [
-    'api_login', 'api_logout', 'api_me',
+    'api_csrf', 'api_login', 'api_logout', 'api_me',
     'api_dashboard',
     'api_cameras', 'api_camera_detail', 'api_camera_live_latest',
     'api_camera_live_start', 'api_camera_live_stop', 'api_camera_live_frame',
     'api_camera_device', 'api_camera_device_update',
+    'api_camera_device_sim', 'api_camera_device_wake',
+    'api_camera_device_settings', 'api_camera_settings_save',
+    'api_camera_settings_pull', 'api_camera_device_state',
     'api_camera_credentials', 'api_camera_simconfig',
     'api_camera_power_on_cm4', 'api_camera_power_off_cm4',
     'api_camera_mqtt_register', 'api_camera_settings',

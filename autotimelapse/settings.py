@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-u_am=8by79nhqo9p@msu21tm5v$nwlrvau@d3(z)qx-fog$%a!')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'unsafe-development-key-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', '0') == '1'
@@ -106,6 +106,11 @@ LOGOUT_REDIRECT_URL = '/login/'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 2   # Default 2 giờ (override bằng set_expiry)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # ── Reverse proxy / HTTPS ─────────────────────────────────────────────────────
 # Tin tưởng X-Forwarded-Proto từ reverse proxy để Django nhận ra request là HTTPS
@@ -128,7 +133,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'autotimelapse'),
         'USER': os.environ.get('DB_USER', 'atl_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'atl_pass_2026'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'CONN_MAX_AGE': 60,
@@ -139,8 +144,8 @@ DATABASES = {
 SEAWEED = {
     "ENDPOINT_URL": os.environ.get('SEAWEED_ENDPOINT_URL', 'http://127.0.0.1:8333'),   # S3 gateway nội bộ
     "PUBLIC_ENDPOINT_URL": os.environ.get('SEAWEED_PUBLIC_ENDPOINT_URL', '') or None,   # URL public cho presigned (browser/device)
-    "ACCESS_KEY": "api-tl-key",
-    "SECRET_KEY": "ApiTL2026SecretXyz",
+    "ACCESS_KEY": os.environ.get("SEAWEED_ACCESS_KEY", ""),
+    "SECRET_KEY": os.environ.get("SEAWEED_SECRET_KEY", ""),
     "BUCKET": "media",
     "REGION": "us-east-1",                       # SeaweedFS bỏ qua nhưng boto3 cần
     "PRESIGN_EXPIRE": 3600,
@@ -161,24 +166,22 @@ R2 = {
     "PUBLIC_DOMAIN":  os.environ.get("R2_PUBLIC_DOMAIN", ""),     # custom domain tùy chọn
 }
 
-# Ảnh cũ hơn N ngày → migrate sang R2; thumbnail SeaweedFS cũng cleanup theo
-STORAGE_HOT_DAYS = int(os.environ.get("STORAGE_HOT_DAYS", "30"))
-
-
-# ── Redis: cache + Celery broker (hệ thống lớn, tác vụ nặng chạy nền) ──────────
+# ── Redis: broker bền vững tách khỏi cache có eviction ────────────────────────
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379')
+REDIS_BROKER_URL = os.environ.get('REDIS_BROKER_URL', REDIS_URL)
+REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', REDIS_URL)
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"{REDIS_URL}/1",
+        "LOCATION": f"{REDIS_CACHE_URL}/1",
         "TIMEOUT": 300,
     }
 }
 
 # Celery: nén ZIP tải hàng loạt chạy nền, KHÔNG block request.
-CELERY_BROKER_URL = f"{REDIS_URL}/0"
-CELERY_RESULT_BACKEND = f"{REDIS_URL}/2"
+CELERY_BROKER_URL = f"{REDIS_BROKER_URL}/0"
+CELERY_RESULT_BACKEND = f"{REDIS_BROKER_URL}/2"
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_TIME_LIMIT = 60 * 30          # cứng 30 phút / task
 CELERY_TASK_SOFT_TIME_LIMIT = 60 * 25
@@ -195,6 +198,8 @@ CELERY_TASK_ROUTES = {
     "core.tasks.build_media_archive":      {"queue": "archive"},
     "core.tasks.cleanup_expired_archives": {"queue": "default"},
     "core.tasks.render_timelapse_video":   {"queue": "render"},
+    "core.tasks.recover_stale_jobs":       {"queue": "default"},
+    "core.tasks.sync_postgres_backups_to_r2": {"queue": "default"},
 }
 
 from celery.schedules import crontab  # noqa: E402
@@ -207,9 +212,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.cleanup_expired_renders",
         "schedule": crontab(hour=3, minute=30),
     },
-    "migrate-cold-to-r2": {
-        "task": "core.tasks.migrate_cold_to_r2",
-        "schedule": crontab(hour=2, minute=0),  # chạy trước cleanup để không xóa file đang migrate
+    "recover-stale-jobs": {
+        "task": "core.tasks.recover_stale_jobs",
+        "schedule": crontab(minute="*/15"),
+    },
+    "sync-postgres-backups-to-r2": {
+        "task": "core.tasks.sync_postgres_backups_to_r2",
+        "schedule": crontab(hour=2, minute=0),
     },
 }
 
@@ -218,7 +227,7 @@ import os as _os
 MQTT_BROKER = _os.environ.get("MQTT_BROKER", "127.0.0.1")
 MQTT_PORT = int(_os.environ.get("MQTT_PORT", "1883"))
 MQTT_USER = _os.environ.get("MQTT_USER", "admin")
-MQTT_PASS = _os.environ.get("MQTT_PASS", "Admin@Mqtt2026")
+MQTT_PASS = _os.environ.get("MQTT_PASS", "")
 MQTT_CLIENT_ID = _os.environ.get("MQTT_CLIENT_ID", "")          # rỗng → tự sinh
 MQTT_SKIP_ACL_SETUP = _os.environ.get("MQTT_SKIP_ACL_SETUP", "0") == "1"
 MQTT_ENABLED = _os.environ.get("MQTT_ENABLED", "1") == "1"
@@ -229,17 +238,23 @@ SYSTEM_PROFILE = _os.environ.get("SYSTEM_PROFILE", "LOW").upper()
 PROFILE_SETTINGS = {
     "LOW": {
         "MEDIA_ARCHIVE_MAX_ITEMS": 1500,
+        "ARCHIVE_DOWNLOAD_WORKERS": 4,
         "RENDER_CHUNK_SIZE": 150,
+        "RENDER_DOWNLOAD_WORKERS": 4,
         "FFMPEG_THREADS": 1,
     },
     "MEDIUM": {
         "MEDIA_ARCHIVE_MAX_ITEMS": 3000,
+        "ARCHIVE_DOWNLOAD_WORKERS": 6,
         "RENDER_CHUNK_SIZE": 300,
+        "RENDER_DOWNLOAD_WORKERS": 6,
         "FFMPEG_THREADS": 2,
     },
     "HIGH": {
         "MEDIA_ARCHIVE_MAX_ITEMS": 5000,
+        "ARCHIVE_DOWNLOAD_WORKERS": 8,
         "RENDER_CHUNK_SIZE": 500,
+        "RENDER_DOWNLOAD_WORKERS": 8,
         "FFMPEG_THREADS": 4,
     },
 }
@@ -249,16 +264,14 @@ _cur_prof = PROFILE_SETTINGS.get(SYSTEM_PROFILE, PROFILE_SETTINGS["LOW"])
 MEDIA_ARCHIVE_TTL_HOURS = 24
 VIDEO_RENDER_TTL_DAYS = int(_os.environ.get("VIDEO_RENDER_TTL_DAYS", 7))
 MEDIA_ARCHIVE_MAX_ITEMS = int(_os.environ.get("MEDIA_ARCHIVE_MAX_ITEMS", _cur_prof["MEDIA_ARCHIVE_MAX_ITEMS"]))
+ARCHIVE_DOWNLOAD_WORKERS = int(_os.environ.get("ARCHIVE_DOWNLOAD_WORKERS", _cur_prof["ARCHIVE_DOWNLOAD_WORKERS"]))
 RENDER_CHUNK_SIZE = int(_os.environ.get("RENDER_CHUNK_SIZE", _cur_prof["RENDER_CHUNK_SIZE"]))
+RENDER_DOWNLOAD_WORKERS = int(_os.environ.get("RENDER_DOWNLOAD_WORKERS", _cur_prof["RENDER_DOWNLOAD_WORKERS"]))
 FFMPEG_THREADS = int(_os.environ.get("FFMPEG_THREADS", _cur_prof["FFMPEG_THREADS"]))
+FFMPEG_PRESET = _os.environ.get("FFMPEG_PRESET", "fast")
+FFMPEG_PRESET_4K = _os.environ.get("FFMPEG_PRESET_4K", "veryfast")
+FFMPEG_4K_LOOKAHEAD = max(0, int(_os.environ.get("FFMPEG_4K_LOOKAHEAD", "10")))
 
-
-
-# Load local overrides (secret, DB, DEBUG) — KHÔNG commit file này
-try:
-    from .local_settings import *  # noqa: F401,F403
-except ImportError:
-    pass
 
 
 # Password validation
@@ -310,9 +323,8 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Load local_settings.py if available (override with environment settings)
+# Load local overrides đúng một lần, sau toàn bộ defaults.
 try:
-    from .local_settings import *
+    from .local_settings import *  # noqa: F401,F403
 except ImportError:
     pass
-

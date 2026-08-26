@@ -35,12 +35,19 @@ def api_renders(request):
     data = []
     for r in page:
         dl = stream = None
-        if r.status == 'ready' and r.output_key:
+        if r.status == 'ready' and r.output_key and not r.is_expired:
             try:
                 fname = f"{r.camera.code}_{r.date_from}_{r.date_to}.mp4"
-                _rs = "r2" if _st._r2_enabled() else None
-                dl = _st.presigned_get_url(r.output_key, expire=3600, download_name=fname, storage=_rs)
-                stream = _st.presigned_get_url(r.output_key, expire=3600, inline_content_type='video/mp4', storage=_rs)
+                dl = _st.presigned_get_url(
+                    r.output_key, expire=3600, download_name=fname,
+                    storage=r.effective_output_storage,
+                    r2_output=r.uses_r2_output_bucket,
+                )
+                stream = _st.presigned_get_url(
+                    r.output_key, expire=3600, inline_content_type='video/mp4',
+                    storage=r.effective_output_storage,
+                    r2_output=r.uses_r2_output_bucket,
+                )
             except Exception:
                 pass
         data.append({
@@ -107,20 +114,26 @@ def api_render_create(request, camera_pk):
     return Response({'ok': True, 'render_id': str(vr.id)}, status=201)
 
 
-@api_view(['DELETE'])
+@api_view(['GET', 'DELETE'])
 def api_render_detail(request, pk):
     try:
         vr = VideoRender.objects.select_related('camera').get(pk=pk)
     except VideoRender.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
+    if not vr.is_accessible_by(request.user):
+        return Response({'detail': 'Permission denied'}, status=403)
+    if request.method == 'GET':
+        return Response({
+            'id': str(vr.id), 'status': vr.status, 'progress': vr.progress,
+            'item_count': vr.item_count, 'size_bytes': vr.size_bytes,
+            'error': vr.error, 'expired': vr.is_expired,
+            'created_at': vr.created_at.isoformat(),
+            'ready_at': vr.ready_at.isoformat() if vr.ready_at else None,
+            'expires_at': vr.expires_at.isoformat() if vr.expires_at else None,
+        })
     if not (request.user.is_staff or vr.requested_by_id == request.user.id
             or vr.camera.is_editable_by(request.user)):
         return Response({'detail': 'Permission denied'}, status=403)
-    if vr.output_key:
-        try:
-            from core.utils import storage as _st
-            _st.delete_key(vr.output_key)
-        except Exception:
-            pass
+    # post_delete signal xóa đúng object storage/bucket, kể cả khi cascade.
     vr.delete()
     return Response(status=204)

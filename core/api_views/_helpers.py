@@ -15,17 +15,20 @@ def camera_to_dict(cam, request=None):
     try:
         from core.utils import storage as _st
         latest = Media.objects.filter(camera=cam).order_by('-taken_at').first()
-        thumb_url = _st.presigned_get_url(latest.effective_thumb_key, expire=3600, storage='seaweed') if latest else None
+        thumb_url = _st.presigned_get_url(
+            latest.effective_thumb_key,
+            expire=3600,
+            storage=latest.effective_thumb_storage,
+        ) if latest else None
     except Exception:
         thumb_url = None
-    return {
+    data = {
         'id': str(cam.id),
         'code': cam.code,
         'name': cam.name,
         'status': cam.status,
         'camera_model': cam.camera_model or 'generic',
         'timezone': str(cam.timezone),
-        'mqtt_password': cam.mqtt_password,
         'site': {
             'id': str(cam.site.id),
             'name': cam.site.name,
@@ -36,6 +39,12 @@ def camera_to_dict(cam, request=None):
         'is_online': is_online(device),
         'device': device_to_dict(device) if device else None,
     }
+    # Credential chỉ xuất hiện với superadmin hoặc client admin sở hữu camera.
+    # Member vẫn xem được camera/telemetry nhưng không nhận secret MQTT.
+    user = getattr(request, 'user', None) if request is not None else None
+    if cam.is_editable_by(user):
+        data['mqtt_password'] = cam.mqtt_password
+    return data
 
 
 def device_to_dict(dev):
@@ -52,12 +61,22 @@ def device_to_dict(dev):
         bars, label = 2, 'Weak'
     else:
         bars, label = 1, 'Poor'
+    cm4_state = getattr(dev, 'effective_cm4_power_state', getattr(dev, 'cm4_power_state', 'off')) or 'off'
+    # Tự động cập nhật DB nếu CM4 đã tắt hoặc quá timeout không có tín hiệu
+    raw_state = getattr(dev, 'cm4_power_state', 'off')
+    if raw_state != 'off' and cm4_state == 'off':
+        try:
+            dev.cm4_power_state = 'off'
+            dev.save(update_fields=['cm4_power_state', 'updated_at'])
+        except Exception:
+            pass
+
     return {
         'id': str(dev.id),
         'last_seen_at': dev.last_seen_at.isoformat() if dev.last_seen_at else None,
         'esp32_last_seen_at': dev.esp32_last_seen_at.isoformat() if getattr(dev, 'esp32_last_seen_at', None) else None,
         'esp32_firmware': getattr(dev, 'esp32_firmware', '') or '',
-        'cm4_power_state': getattr(dev, 'cm4_power_state', 'off') or 'off',
+        'cm4_power_state': cm4_state,
         'cm4_last_seen_at': dev.cm4_last_seen_at.isoformat() if getattr(dev, 'cm4_last_seen_at', None) else None,
         'sim_active_node': getattr(dev, 'sim_active_node', 'esp32') or 'esp32',
         'battery_percent': dev.battery_percent,
@@ -73,6 +92,7 @@ def device_to_dict(dev):
         'temperature_c': float(dev.temperature_c) if dev.temperature_c else None,
         'humidity_percent': getattr(dev, 'humidity_percent', None),
         'firmware_version': getattr(dev, 'firmware_version', '') or '',
+        'force_power_on': getattr(dev, 'force_power_on', False),
         'capture_interval_sec': getattr(dev, 'capture_interval_sec', None),
         'schedule_enabled': getattr(dev, 'schedule_enabled', False),
         'work_start_time': getattr(dev, 'work_start_time', '06:00') or '06:00',

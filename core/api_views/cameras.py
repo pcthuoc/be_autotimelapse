@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
-from core.models import Camera, CameraCredential, CameraDevice, CameraSettings, Media, Site
+from core.models import Camera, CameraDevice, CameraSettings, Media, Site
 from ._helpers import (
     camera_to_dict, device_to_dict, filter_cameras_for_user,
     get_user_membership, is_client_admin, user_can_access_camera,
@@ -118,6 +118,8 @@ def api_camera_detail(request, pk):
                 cam.camera_model = m_val
             else:
                 cam.camera_model = Camera.Model.GENERIC
+        old_code = cam.code
+        old_password = cam.mqtt_password
         if 'site_id' in request.data:
             sid = request.data.get('site_id')
             if not sid:
@@ -143,7 +145,27 @@ def api_camera_detail(request, pk):
             if f in request.data:
                 setattr(cam, f, request.data[f])
         cam.save()
-        return Response(camera_to_dict(cam, request))
+        response_data = camera_to_dict(cam, request)
+        if cam.code != old_code or cam.mqtt_password != old_password:
+            try:
+                from mqtt_service import device_manager
+                mqtt_errors = []
+                if cam.code != old_code:
+                    mqtt_errors.extend(device_manager.unregister_device(old_code))
+                result = device_manager.ensure_device_registered(cam)
+                mqtt_errors.extend(result['errors'])
+                response_data['mqtt'] = {
+                    'registered': result['ok'],
+                    'errors': mqtt_errors,
+                    'hardware_update_required': True,
+                }
+            except Exception as exc:
+                response_data['mqtt'] = {
+                    'registered': False,
+                    'errors': [str(exc)],
+                    'hardware_update_required': True,
+                }
+        return Response(response_data)
 
     if not cam.is_editable_by(request.user):
         return Response({'detail': 'Permission denied'}, status=403)
@@ -170,7 +192,11 @@ def api_camera_live_latest(request, pk):
     from core.utils import storage as _st
     fname = f"{cam.code}_{media.taken_at.strftime('%Y%m%d_%H%M%S')}.jpg"
     try:
-        thumb_url = _st.presigned_get_url(media.effective_thumb_key, expire=3600, storage='seaweed')
+        thumb_url = _st.presigned_get_url(
+            media.effective_thumb_key,
+            expire=3600,
+            storage=media.effective_thumb_storage,
+        )
     except Exception:
         thumb_url = None
     try:
@@ -205,6 +231,42 @@ def api_camera_live_stop(request, pk):
 def api_camera_live_frame(request, pk):
     from core.views.camera import live_view_frame
     return live_view_frame(request._request, pk)
+
+
+@api_view(['POST'])
+def api_camera_device_sim(request, pk):
+    from core.views.camera import camera_device_sim
+    return camera_device_sim(request._request, pk)
+
+
+@api_view(['POST'])
+def api_camera_device_wake(request, pk):
+    from core.views.camera import camera_device_wake
+    return camera_device_wake(request._request, pk)
+
+
+@api_view(['POST', 'GET'])
+def api_camera_device_settings(request, pk):
+    from core.views.camera import camera_device_settings
+    return camera_device_settings(request._request, pk)
+
+
+@api_view(['POST'])
+def api_camera_settings_save(request, pk):
+    from core.views.camera import camera_settings_save
+    return camera_settings_save(request._request, pk)
+
+
+@api_view(['POST'])
+def api_camera_settings_pull(request, pk):
+    from core.views.camera import camera_settings_pull
+    return camera_settings_pull(request._request, pk)
+
+
+@api_view(['GET'])
+def api_camera_device_state(request, pk):
+    from core.views.camera import camera_device_state
+    return camera_device_state(request._request, pk)
 
 
 @api_view(['GET'])
@@ -275,35 +337,51 @@ def api_camera_device_update(request, pk):
 
 @api_view(['GET', 'POST'])
 def api_camera_credentials(request, pk):
-    if not request.user.is_staff:
-        return Response({'detail': 'Admin only'}, status=403)
     try:
         cam = Camera.objects.get(pk=pk)
     except Camera.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Admin only'}, status=403)
 
     if request.method == 'POST':
-        cred, raw_secret = CameraCredential.generate_credential(cam)
+        cam.mqtt_password = _secrets.token_urlsafe(16)
+        cam.save(update_fields=['mqtt_password', 'updated_at'])
+        mqtt_result = {'ok': False, 'errors': []}
+        try:
+            from mqtt_service import device_manager
+            mqtt_result = device_manager.ensure_device_registered(cam)
+        except Exception as exc:
+            mqtt_result['errors'] = [str(exc)]
         return Response({
-            'camera_code': cam.code, 'device_key': cred.key_id,
-            'device_secret': raw_secret, 'mqtt_password': cam.mqtt_password,
-            'note': 'Lưu device_secret ngay — sau này không lấy lại được.',
+            'camera_code': cam.code,
+            'device_key': cam.code,
+            'device_secret': cam.mqtt_password,
+            'mqtt_password': cam.mqtt_password,
+            'mqtt_registered': mqtt_result['ok'],
+            'mqtt_errors': mqtt_result['errors'],
+            'hardware_update_required': True,
+            'note': 'Một mật khẩu dùng chung cho MQTT và upload. Cập nhật MQTT_PASSWORD trên CM4.',
         }, status=201)
 
-    creds = CameraCredential.objects.filter(camera=cam).order_by('-created_at')
-    return Response({'camera_code': cam.code, 'mqtt_password': cam.mqtt_password,
-                     'credentials': [{'key_id': c.key_id, 'status': c.status,
-                                      'created_at': c.created_at.isoformat()} for c in creds]})
+    return Response({
+        'camera_code': cam.code,
+        'device_key': cam.code,
+        'device_secret': cam.mqtt_password,
+        'mqtt_password': cam.mqtt_password,
+        'credentials': [],
+        'credential_mode': 'shared_mqtt_password',
+    })
 
 
 @api_view(['GET'])
 def api_camera_simconfig(request, pk):
-    if not request.user.is_staff:
-        return Response({'detail': 'Admin only'}, status=403)
     try:
         cam = Camera.objects.get(pk=pk)
     except Camera.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Admin only'}, status=403)
     return Response({
         'CAMERA_CODE': cam.code, 'MQTT_PASSWORD': cam.mqtt_password,
         'MQTT_BROKER': request.META.get('HTTP_HOST', 'localhost').split(':')[0],
@@ -322,11 +400,12 @@ def api_camera_power_on_cm4(request, pk):
         return Response({'detail': 'Permission denied'}, status=403)
     from mqtt_service import publisher
     try:
-        publisher.publish_cmd(cam.code, "power_on_cm4", {})
+        publisher.publish_cmd(cam.code, "power_on_cm4", {"intent": "manual_override", "interactive": True})
         dev, _ = CameraDevice.objects.get_or_create(camera=cam)
+        dev.force_power_on = True
         dev.cm4_power_state = "powering_on"
-        dev.save(update_fields=["cm4_power_state", "updated_at"])
-        return Response({"ok": True, "cm4_power_state": "powering_on"})
+        dev.save(update_fields=["force_power_on", "cm4_power_state", "updated_at"])
+        return Response({"ok": True, "cm4_power_state": "powering_on", "force_power_on": True})
     except Exception as exc:
         return Response({"detail": str(exc)}, status=500)
 
@@ -343,21 +422,22 @@ def api_camera_power_off_cm4(request, pk):
     try:
         publisher.publish_cmd(cam.code, "power_off_cm4", {})
         dev, _ = CameraDevice.objects.get_or_create(camera=cam)
+        dev.force_power_on = False
         dev.cm4_power_state = "shutting_down"
-        dev.save(update_fields=["cm4_power_state", "updated_at"])
-        return Response({"ok": True, "cm4_power_state": "shutting_down"})
+        dev.save(update_fields=["force_power_on", "cm4_power_state", "updated_at"])
+        return Response({"ok": True, "cm4_power_state": "shutting_down", "force_power_on": False})
     except Exception as exc:
         return Response({"detail": str(exc)}, status=500)
 
 
 @api_view(['GET', 'POST'])
 def api_camera_mqtt_register(request, pk):
-    if not request.user.is_staff:
-        return Response({'detail': 'Admin only'}, status=403)
     try:
         cam = Camera.objects.get(pk=pk)
     except Camera.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
+    if not cam.is_editable_by(request.user):
+        return Response({'detail': 'Admin only'}, status=403)
     from mqtt_service import device_manager
     if request.method == 'GET':
         s = device_manager.get_device_status(cam.code)
@@ -440,6 +520,50 @@ def _push_camera_schedules(camera):
         pass
 
 
+def _validated_schedule_payload(data, partial=False):
+    from datetime import datetime
+
+    result = {}
+    if not partial or 'name' in data:
+        name = str(data.get('name') or 'Khung giờ chụp').strip()
+        if not name or len(name) > 64:
+            raise ValueError('name phải có 1–64 ký tự')
+        result['name'] = name
+    for field, default in (('start_time', '07:00'), ('end_time', '17:00')):
+        if not partial or field in data:
+            value = str(data.get(field) or default).strip()
+            try:
+                datetime.strptime(value, '%H:%M')
+            except ValueError as exc:
+                raise ValueError(f'{field} phải đúng định dạng HH:MM') from exc
+            result[field] = value
+    if not partial or 'interval_sec' in data:
+        try:
+            interval = int(data.get('interval_sec') or 300)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('interval_sec phải là số nguyên') from exc
+        if not 30 <= interval <= 86400:
+            raise ValueError('interval_sec phải trong khoảng 30–86400')
+        result['interval_sec'] = interval
+    if not partial or 'days_of_week' in data:
+        days = data.get('days_of_week') or [1, 2, 3, 4, 5, 6, 7]
+        if not isinstance(days, list):
+            raise ValueError('days_of_week phải là danh sách [1..7]')
+        try:
+            days = sorted(set(int(day) for day in days))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('days_of_week chỉ nhận số từ 1 đến 7') from exc
+        if not days or any(day < 1 or day > 7 for day in days):
+            raise ValueError('days_of_week chỉ nhận số từ 1 đến 7')
+        result['days_of_week'] = days
+    if not partial or 'is_enabled' in data:
+        enabled = data.get('is_enabled', True)
+        if not isinstance(enabled, bool):
+            raise ValueError('is_enabled phải là boolean')
+        result['is_enabled'] = enabled
+    return result
+
+
 @api_view(['GET', 'POST'])
 def api_camera_schedules(request, pk):
     from core.models import CameraSchedule
@@ -457,21 +581,14 @@ def api_camera_schedules(request, pk):
     if not cam.is_editable_by(request.user):
         return Response({'detail': 'Permission denied'}, status=403)
 
-    name = str(request.data.get('name') or 'Khung giờ chụp').strip()
-    start_time = str(request.data.get('start_time') or '07:00').strip()
-    end_time = str(request.data.get('end_time') or '17:00').strip()
-    interval_sec = int(request.data.get('interval_sec') or 300)
-    is_enabled = bool(request.data.get('is_enabled', True))
-    days_of_week = request.data.get('days_of_week') or [1, 2, 3, 4, 5, 6, 7]
+    try:
+        payload = _validated_schedule_payload(request.data)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
 
     sched = CameraSchedule.objects.create(
         camera=cam,
-        name=name,
-        start_time=start_time,
-        end_time=end_time,
-        interval_sec=max(30, min(86400, interval_sec)),
-        is_enabled=is_enabled,
-        days_of_week=days_of_week,
+        **payload,
     )
     _push_camera_schedules(cam)
     return Response(sched.to_dict(), status=201)
@@ -493,13 +610,14 @@ def api_camera_schedule_detail(request, pk, schedule_id):
         _push_camera_schedules(cam)
         return Response(status=204)
 
-    updatable = ['name', 'is_enabled', 'start_time', 'end_time', 'interval_sec', 'days_of_week']
-    for f in updatable:
-        if f in request.data:
-            if f == 'interval_sec':
-                setattr(sched, f, max(30, min(86400, int(request.data[f]))))
-            else:
-                setattr(sched, f, request.data[f])
-    sched.save()
+    try:
+        payload = _validated_schedule_payload(request.data, partial=True)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    if not payload:
+        return Response({'detail': 'Không có field hợp lệ để cập nhật'}, status=400)
+    for field, value in payload.items():
+        setattr(sched, field, value)
+    sched.save(update_fields=[*payload.keys(), 'updated_at'])
     _push_camera_schedules(cam)
     return Response(sched.to_dict())

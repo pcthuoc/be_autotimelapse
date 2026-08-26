@@ -316,29 +316,31 @@ class CameraSettingsForm(forms.Form):
             fdef = spec["fields"].get(field_name, {})
             label = fdef.get("label", field_name)
             note = fdef.get("note", "")
-            # Choices: capabilities override (dynamic) hoặc từ spec
-            if fdef.get("dynamic") and caps.get(field_name, {}).get("choices"):
-                choices = caps[field_name]["choices"]
-            else:
-                choices = fdef.get("choices", [])
+            # Choices: ưu tiên capabilities từ camera thực tế, fallback về spec
+            choices = caps.get(field_name, {}).get("choices") or fdef.get("choices", [])
 
-            if choices:
-                self.fields[field_name] = forms.ChoiceField(
-                    choices=[("", "—")] + [(c, c) for c in choices],
-                    required=False,
-                    label=label,
-                    widget=forms.Select(attrs={
-                        "class": "form-select form-select-sm",
-                        "title": note,
-                    }),
-                )
-            else:
+            if fdef.get("type") == "TEXT" or not choices:
                 self.fields[field_name] = forms.CharField(
                     required=False,
                     label=label,
                     widget=forms.TextInput(attrs={
                         "class": "form-control form-control-sm",
                         "placeholder": label,
+                        "title": note,
+                    }),
+                )
+            else:
+                submitted_data = args[0] if args and isinstance(args[0], dict) else {}
+                submitted_val = submitted_data.get(field_name) or (instance and getattr(instance, field_name, None))
+                all_choices = list(choices)
+                if submitted_val and str(submitted_val) not in all_choices:
+                    all_choices.append(str(submitted_val))
+                self.fields[field_name] = forms.ChoiceField(
+                    choices=[("", "—")] + [(str(c), str(c)) for c in all_choices],
+                    required=False,
+                    label=label,
+                    widget=forms.Select(attrs={
+                        "class": "form-select form-select-sm",
                         "title": note,
                     }),
                 )

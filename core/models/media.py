@@ -7,10 +7,11 @@ from django.utils import timezone
 
 class Media(models.Model):
     """
-    Metadata của 1 ảnh timelapse. File thực nằm trên SeaweedFS (S3),
+    Metadata của 1 ảnh timelapse. Original ưu tiên nằm trên Cloudflare R2,
+    thumbnail nhẹ nằm trên SeaweedFS,
     Django chỉ giữ metadata + key để tạo presigned URL.
 
-    Quy ước key trên bucket ``media``:
+    Quy ước key thống nhất giữa hai backend:
         <camera_id>/YYYY/MM/DD/<uuid>.jpg          → ảnh gốc
         <camera_id>/YYYY/MM/DD/<uuid>_thumb.jpg    → thumbnail
     """
@@ -78,6 +79,11 @@ class Media(models.Model):
     def effective_thumb_key(self):
         """Key dùng cho thumbnail: có thumb thì dùng, không thì fallback ảnh gốc."""
         return self.thumb_key or self.s3_key
+
+    @property
+    def effective_thumb_storage(self):
+        """Thumbnail thật nằm SeaweedFS; fallback ảnh gốc giữ đúng backend của ảnh."""
+        return self.Storage.SEAWEED if self.thumb_key else self.storage
 
 
 class MediaDayStat(models.Model):
@@ -151,10 +157,20 @@ class MediaArchive(models.Model):
 
     item_count = models.PositiveIntegerField(default=0)
     zip_key = models.CharField(max_length=512, blank=True)
+    output_storage = models.CharField(
+        max_length=16, choices=Media.Storage.choices, blank=True, default=""
+    )
+    output_bucket = models.CharField(
+        max_length=16,
+        choices=(("media", "Media bucket"), ("output", "Output bucket")),
+        blank=True,
+        default="",
+    )
     size_bytes = models.BigIntegerField(default=0)
     error = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
     ready_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -184,11 +200,24 @@ class MediaArchive(models.Model):
             return True
         return bool(self.expires_at and timezone.now() >= self.expires_at)
 
+    @property
+    def effective_output_storage(self):
+        if self.output_storage:
+            return self.output_storage
+        from core.utils.storage import _r2_enabled
+        return Media.Storage.R2 if _r2_enabled() else Media.Storage.SEAWEED
+
+    @property
+    def uses_r2_output_bucket(self):
+        # Archive R2 đã luôn được ghi vào output bucket trước migration này.
+        return self.effective_output_storage == Media.Storage.R2 and self.output_bucket != "media"
+
 
 class VideoRender(models.Model):
     """
     Job render video timelapse từ ảnh của 1 camera trong khoảng thời gian.
-    Chạy nền qua Celery. File video lưu trên SeaweedFS.
+    Chạy nền qua Celery. File video mới lưu ở R2 output bucket khi R2 bật,
+    nếu không thì fallback về SeaweedFS.
 
     Vòng đời: pending → processing → ready | failed
     """
@@ -242,11 +271,23 @@ class VideoRender(models.Model):
     # Kết quả
     item_count  = models.PositiveIntegerField(default=0)
     output_key  = models.CharField(max_length=512, blank=True)
+    # Để trống cho render legacy: code sẽ giữ cách lookup cũ (R2 media bucket
+    # nếu R2 đang bật, ngược lại SeaweedFS). Render mới luôn ghi rõ hai field.
+    output_storage = models.CharField(
+        max_length=16, choices=Media.Storage.choices, blank=True, default=""
+    )
+    output_bucket = models.CharField(
+        max_length=16,
+        choices=(("media", "Media bucket"), ("output", "Output bucket")),
+        blank=True,
+        default="",
+    )
     size_bytes  = models.BigIntegerField(default=0)
     error       = models.TextField(blank=True)
     progress    = models.PositiveIntegerField(default=0)  # 0-100
 
     created_at = models.DateTimeField(auto_now_add=True)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
     ready_at   = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -268,3 +309,21 @@ class VideoRender(models.Model):
         if user.is_staff:
             return True
         return self.requested_by_id == user.id or self.camera.is_media_viewable_by(user)
+
+    @property
+    def is_expired(self):
+        if self.status == self.Status.EXPIRED:
+            return True
+        return bool(self.expires_at and timezone.now() >= self.expires_at)
+
+    @property
+    def effective_output_storage(self):
+        """Storage của output; giữ tương thích các render tạo trước migration."""
+        if self.output_storage:
+            return self.output_storage
+        from core.utils.storage import _r2_enabled
+        return Media.Storage.R2 if _r2_enabled() else Media.Storage.SEAWEED
+
+    @property
+    def uses_r2_output_bucket(self):
+        return self.output_storage == Media.Storage.R2 and self.output_bucket == "output"

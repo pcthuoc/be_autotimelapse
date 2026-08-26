@@ -53,8 +53,8 @@ MQTT_PASS = os.environ.get("MQTT_PASS", "Admin@Mqtt2026")
 SEAWEED = {
     "ENDPOINT_URL": os.environ.get("SEAWEED_ENDPOINT_URL", "http://localhost:8333"),
     "PUBLIC_ENDPOINT_URL": os.environ.get("SEAWEED_PUBLIC_ENDPOINT_URL", "http://cloud.congnghetimelapse.com:8333"),
-    "ACCESS_KEY": os.environ.get("SEAWEED_ACCESS_KEY", "api-tl-key"),
-    "SECRET_KEY": os.environ.get("SEAWEED_SECRET_KEY", "ApiTL2026SecretXyz"),
+    "ACCESS_KEY": os.environ.get("SEAWEED_ACCESS_KEY", ""),
+    "SECRET_KEY": os.environ.get("SEAWEED_SECRET_KEY", ""),
     "BUCKET": os.environ.get("SEAWEED_BUCKET", "media"),
     "REGION": "us-east-1",
     "PRESIGN_EXPIRE": 3600,
